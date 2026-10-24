@@ -105,8 +105,15 @@ class FixBondFlux : public Fix {
 
   // three-body swap potential
 
-  double epsilon, sigma, npow, rc3, rc3sq, lambda, rmin, rminsq, phic, rbondsq;
-  int eshift;                      // 1 = two-body potential shifted to zero at rc3
+  struct Param3 {                  // parameters of one pair of sticker types
+    double epsilon, sigma, npow, rc, rcsq, lambda;
+    double rmin, rminsq, phic, rbondsq;
+  };
+
+  double epsilon, sigma, npow, rc3, lambda;    // defaults from the fix arguments
+  double rc3max;                   // largest cutoff of any bondable pair
+  Param3 **param3;                 // param3[itype][jtype]
+  int eshift;                      // 1 = two-body potential shifted to zero at the cutoff
   double e2, e3, nbondpair, nmulti;
   int maxshort;
   int *neighshort;
@@ -137,7 +144,8 @@ class FixBondFlux : public Fix {
   // three-body helpers
 
   void threebody_compute(int, int);
-  void bond_potential(double, double &, double &);
+  void set_param3(Param3 &, double, double, double, double, double, double);
+  void bond_potential(const Param3 &, double, double &, double &);
   void work_grow();
 };
 

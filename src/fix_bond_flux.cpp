@@ -47,6 +47,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
@@ -67,12 +68,18 @@ static constexpr int DELTA = 64;
 
 enum { CAND_EXCHANGE, CAND_FREE };
 
+// three-body parameters of one coeff keyword: type ranges and values
+struct Coeff3 {
+  int ilo, ihi, jlo, jhi, iarg;
+  double epsilon, sigma, npow, rc, lambda;
+};
+
 /* ---------------------------------------------------------------------- */
 
 FixBondFlux::FixBondFlux(LAMMPS *lmp, int narg, char **arg) :
     Fix(lmp, narg, arg), bondable(nullptr), store(nullptr), random(nullptr), porig(nullptr),
     chflag(nullptr), dcount(nullptr), sector(nullptr), order(nullptr), cand(nullptr),
-    binhead(nullptr), binnext(nullptr), neighshort(nullptr), list(nullptr)
+    binhead(nullptr), binnext(nullptr), param3(nullptr), neighshort(nullptr), list(nullptr)
 {
   const std::string fixname = fmt::format("fix {}", style);
   if (narg < 4) utils::missing_cmd_args(FLERR, fixname, error);
@@ -98,10 +105,23 @@ FixBondFlux::FixBondFlux(LAMMPS *lmp, int narg, char **arg) :
   molflag = ANY;
   pairflag = 0;
   wlj = wcoul = 1.0;
-  epsilon = sigma = npow = rc3 = rc3sq = lambda = rmin = rminsq = phic = rbondsq = 0.0;
+  epsilon = sigma = npow = rc3 = lambda = rc3max = 0.0;
   double rbond = -1.0;
   int seed = 0;
   int iarg = 0;
+  std::vector<Coeff3> coeffs;
+
+  // checks one set of three-body parameters, the first of which is arg[ifirst]
+  auto check3 = [&](double eps, double sig, double n, double cut, double lam, int ifirst) {
+    if (eps <= 0.0) error->all(FLERR, ifirst, "Illegal fix {} 3body epsilon value {}", style, eps);
+    if (sig <= 0.0) error->all(FLERR, ifirst + 1, "Illegal fix {} 3body sigma value {}", style, sig);
+    if (n <= 0.0) error->all(FLERR, ifirst + 2, "Illegal fix {} 3body exponent value {}", style, n);
+    const double rm = pow(2.0, 1.0 / n) * sig;
+    if (cut <= rm)
+      error->all(FLERR, ifirst + 3,
+                 "Fix {} 3body cutoff {} must be larger than the potential minimum {}", style, cut, rm);
+    if (lam < 0.0) error->all(FLERR, ifirst + 4, "Illegal fix {} 3body lambda value {}", style, lam);
+  };
 
   if (mode == MC) {
     if (narg < 9) utils::missing_cmd_args(FLERR, fixname + " mc", error);
@@ -126,14 +146,7 @@ FixBondFlux::FixBondFlux(LAMMPS *lmp, int narg, char **arg) :
     npow = utils::numeric(FLERR, arg[6], false, lmp);
     rc3 = utils::numeric(FLERR, arg[7], false, lmp);
     lambda = utils::numeric(FLERR, arg[8], false, lmp);
-    if (epsilon <= 0.0) error->all(FLERR, 4, "Illegal fix {} 3body epsilon value {}", style, epsilon);
-    if (sigma <= 0.0) error->all(FLERR, 5, "Illegal fix {} 3body sigma value {}", style, sigma);
-    if (npow <= 0.0) error->all(FLERR, 6, "Illegal fix {} 3body exponent value {}", style, npow);
-    rmin = pow(2.0, 1.0 / npow) * sigma;
-    if (rc3 <= rmin)
-      error->all(FLERR, 7, "Fix {} 3body cutoff {} must be larger than the potential minimum {}",
-                 style, rc3, rmin);
-    if (lambda < 0.0) error->all(FLERR, 8, "Illegal fix {} 3body lambda value {}", style, lambda);
+    check3(epsilon, sigma, npow, rc3, lambda, 4);
     iarg = 9;
   }
 
@@ -217,6 +230,20 @@ FixBondFlux::FixBondFlux(LAMMPS *lmp, int narg, char **arg) :
       else
         error->all(FLERR, iarg + 1, "Unknown fix {} molecule option {}", style, arg[iarg + 1]);
       iarg += 2;
+    } else if ((strcmp(arg[iarg], "coeff") == 0) && (mode == THREEBODY)) {
+      if (iarg + 8 > narg) utils::missing_cmd_args(FLERR, fixname + " coeff", error);
+      Coeff3 c;
+      c.iarg = iarg;
+      utils::bounds_typelabel(FLERR, arg[iarg + 1], 1, ntypes, c.ilo, c.ihi, lmp, Atom::ATOM);
+      utils::bounds_typelabel(FLERR, arg[iarg + 2], 1, ntypes, c.jlo, c.jhi, lmp, Atom::ATOM);
+      c.epsilon = utils::numeric(FLERR, arg[iarg + 3], false, lmp);
+      c.sigma = utils::numeric(FLERR, arg[iarg + 4], false, lmp);
+      c.npow = utils::numeric(FLERR, arg[iarg + 5], false, lmp);
+      c.rc = utils::numeric(FLERR, arg[iarg + 6], false, lmp);
+      c.lambda = utils::numeric(FLERR, arg[iarg + 7], false, lmp);
+      check3(c.epsilon, c.sigma, c.npow, c.rc, c.lambda, iarg + 3);
+      coeffs.push_back(c);
+      iarg += 8;
     } else if ((strcmp(arg[iarg], "rbond") == 0) && (mode == THREEBODY)) {
       if (iarg + 2 > narg) utils::missing_cmd_args(FLERR, fixname + " rbond", error);
       rbond = utils::numeric(FLERR, arg[iarg + 1], false, lmp);
@@ -253,12 +280,27 @@ FixBondFlux::FixBondFlux(LAMMPS *lmp, int narg, char **arg) :
     random = new RanMars(lmp, seed + comm->me);
   } else {
     if (lmp->citeme) lmp->citeme->add(cite_fix_bond_flux_3body);
-    if (rbond < 0.0) rbond = rc3;
-    rc3sq = rc3 * rc3;
-    rminsq = rmin * rmin;
-    rbondsq = rbond * rbond;
-    double sr = pow(sigma / rc3, npow);
-    phic = eshift ? 4.0 * (sr * sr - sr) : 0.0;
+
+    // the fix arguments are the parameters of every pair of sticker types,
+    //   coeff keywords override them for selected bondable pairs
+
+    memory->create(param3, ntypes + 1, ntypes + 1, "bond/flux:param3");
+    for (int i = 0; i <= ntypes; i++)
+      for (int j = 0; j <= ntypes; j++)
+        set_param3(param3[i][j], epsilon, sigma, npow, rc3, lambda, rbond);
+    for (const auto &c : coeffs)
+      for (int i = c.ilo; i <= c.ihi; i++)
+        for (int j = c.jlo; j <= c.jhi; j++) {
+          if (!bondable[i][j])
+            error->all(FLERR, c.iarg, "Fix {} 3body coeff for atom types {} and {} that are not bondable",
+                       style, i, j);
+          set_param3(param3[i][j], c.epsilon, c.sigma, c.npow, c.rc, c.lambda, rbond);
+          param3[j][i] = param3[i][j];
+        }
+    rc3max = 0.0;
+    for (int i = 1; i <= ntypes; i++)
+      for (int j = 1; j <= ntypes; j++)
+        if (bondable[i][j]) rc3max = MAX(rc3max, param3[i][j].rc);
     scalar_flag = 1;
     vector_flag = 1;
     size_vector = 4;
@@ -300,6 +342,7 @@ FixBondFlux::~FixBondFlux()
 
   delete random;
   memory->destroy(bondable);
+  memory->destroy(param3);
   memory->destroy(store);
   memory->destroy(porig);
   memory->destroy(chflag);
@@ -393,7 +436,7 @@ void FixBondFlux::init()
       error->all(FLERR, Error::NOLASTLINE, "Fix {} 3body requires newton on", style);
 
     auto *req = neighbor->add_request(this, NeighConst::REQ_FULL);
-    req->set_cutoff_fixed(rc3);
+    req->set_cutoff_fixed(rc3max);
     comm_forward = 0;
 
     // the fix supplies the complete interaction between bondable sticker types,
@@ -408,10 +451,10 @@ void FixBondFlux::init()
       int nonzero = 0;
       if (atom->nlocal > 0) {
         double fdummy;
-        double rsq = 0.9 * rmin * 0.9 * rmin;
         for (int i = 1; i <= ntypes; i++)
           for (int j = i; j <= ntypes; j++) {
             if (!all[i] || !all[j] || !bondable[i][j]) continue;
+            const double rsq = 0.81 * param3[i][j].rminsq;
             if (rsq >= force->pair->cutsq[i][j]) continue;
             if (force->pair->single(0, 0, i, j, rsq, 1.0, 1.0, fdummy) != 0.0) nonzero = 1;
           }
@@ -443,10 +486,10 @@ void FixBondFlux::setup(int /*vflag*/)
   } else {
     double cutghost = MIN(comm->cutghost[0], comm->cutghost[1]);
     if (domain->dimension == 3) cutghost = MIN(cutghost, comm->cutghost[2]);
-    if (!domain->triclinic && (cutghost < rc3 + neighbor->skin))
+    if (!domain->triclinic && (cutghost < rc3max + neighbor->skin))
       error->all(FLERR, Error::NOLASTLINE,
                  "Fix {} 3body needs a communication cutoff of at least {:.6}; "
-                 "use comm_modify cutoff", style, rc3 + neighbor->skin);
+                 "use comm_modify cutoff", style, rc3max + neighbor->skin);
   }
 }
 
@@ -1168,17 +1211,39 @@ double FixBondFlux::count_bonds()
 }
 
 /* ----------------------------------------------------------------------
-   Sciortino two-body bonding potential, 2n-n Lennard-Jones form,
-   shifted to zero at rc3 and rescaled to a depth of -epsilon at rmin
+   set the three-body parameters of one pair of sticker types
+   rbond <= 0 means that a bond is any pair within the cutoff
 ------------------------------------------------------------------------- */
 
-void FixBondFlux::bond_potential(double r, double &v, double &dvdr)
+void FixBondFlux::set_param3(Param3 &p, double eps, double sig, double n, double cut, double lam,
+                             double rbond)
 {
-  const double sr = pow(sigma / r, npow);
+  p.epsilon = eps;
+  p.sigma = sig;
+  p.npow = n;
+  p.rc = cut;
+  p.rcsq = cut * cut;
+  p.lambda = lam;
+  p.rmin = pow(2.0, 1.0 / n) * sig;
+  p.rminsq = p.rmin * p.rmin;
+  const double sr = pow(sig / cut, n);
+  p.phic = eshift ? 4.0 * (sr * sr - sr) : 0.0;
+  const double rb = (rbond > 0.0) ? rbond : cut;
+  p.rbondsq = rb * rb;
+}
+
+/* ----------------------------------------------------------------------
+   Sciortino two-body bonding potential, 2n-n Lennard-Jones form,
+   shifted to zero at the cutoff and rescaled to a depth of -epsilon at rmin
+------------------------------------------------------------------------- */
+
+void FixBondFlux::bond_potential(const Param3 &p, double r, double &v, double &dvdr)
+{
+  const double sr = pow(p.sigma / r, p.npow);
   const double phi = 4.0 * (sr * sr - sr);
-  const double dphi = -4.0 * npow * (2.0 * sr * sr - sr) / r;
-  const double scale = epsilon / (1.0 + phic);
-  v = scale * (phi - phic);
+  const double dphi = -4.0 * p.npow * (2.0 * sr * sr - sr) / r;
+  const double scale = p.epsilon / (1.0 + p.phic);
+  v = scale * (phi - p.phic);
   dvdr = scale * dphi;
 }
 
@@ -1186,6 +1251,9 @@ void FixBondFlux::bond_potential(double r, double &v, double &dvdr)
    two-body and three-body forces between stickers, as in pair style sw:
    full neighbor list, each pair computed once, triplets centered on owned atoms,
    forces on ghost atoms are summed to their owners by the reverse communication
+   each pair of types has its own parameters; the three-body term of a triplet
+   j-i-k has the strength min(lambda_ij eps_ij, lambda_ik eps_ik), which keeps
+   a swap between bonds of different strength free of barriers for lambda = 1
 ------------------------------------------------------------------------- */
 
 void FixBondFlux::threebody_compute(int eflag, int vflag)
@@ -1206,7 +1274,6 @@ void FixBondFlux::threebody_compute(int eflag, int vflag)
   int *ilist = list->ilist;
   int *numneigh = list->numneigh;
   int **firstneigh = list->firstneigh;
-  const double pre = lambda * epsilon;
 
   for (int ii = 0; ii < inum; ii++) {
     const int i = ilist[ii];
@@ -1230,12 +1297,13 @@ void FixBondFlux::threebody_compute(int eflag, int vflag)
       j &= NEIGHMASK;
       if (!(mask[j] & groupbit)) continue;
       if (!bondable[itype][type[j]]) continue;
+      const Param3 &pij = param3[itype][type[j]];
 
       const double delx = xtmp - x[j][0];
       const double dely = ytmp - x[j][1];
       const double delz = ztmp - x[j][2];
       const double rsq = delx * delx + dely * dely + delz * delz;
-      if (rsq >= rc3sq) continue;
+      if (rsq >= pij.rcsq) continue;
 
       if (numshort == maxshort) {
         maxshort += DELTA;
@@ -1243,7 +1311,7 @@ void FixBondFlux::threebody_compute(int eflag, int vflag)
       }
       neighshort[numshort++] = j;
 
-      if (rsq < rbondsq) {
+      if (rsq < pij.rbondsq) {
         ncoord++;
         if (rsq < rnear) {
           rnear = rsq;
@@ -1266,7 +1334,7 @@ void FixBondFlux::threebody_compute(int eflag, int vflag)
 
       const double r = sqrt(rsq);
       double v, dvdr;
-      bond_potential(r, v, dvdr);
+      bond_potential(pij, r, v, dvdr);
       const double fpair = -dvdr / r;
 
       f[i][0] += delx * fpair;
@@ -1292,34 +1360,37 @@ void FixBondFlux::threebody_compute(int eflag, int vflag)
     nbondpair += ncoord;
     if (ncoord > 1) nmulti += 1.0;
 
-    if (pre == 0.0) continue;
-
-    // three-body term: E = lambda eps V3(r_ij) V3(r_ik) for all pairs j < k
+    // three-body term: E = pre V3(r_ij) V3(r_ik) for all pairs j < k,
+    //   with V3 of each leg from the parameters of its pair of types
 
     for (int jj = 0; jj < numshort - 1; jj++) {
       const int j = neighshort[jj];
+      const Param3 &pij = param3[itype][type[j]];
       const double delr1[3] = {x[j][0] - xtmp, x[j][1] - ytmp, x[j][2] - ztmp};
       const double rsq1 = delr1[0] * delr1[0] + delr1[1] * delr1[1] + delr1[2] * delr1[2];
       const double r1 = sqrt(rsq1);
       double v3j = 1.0, dv3j = 0.0;
-      if (rsq1 > rminsq) {
+      if (rsq1 > pij.rminsq) {
         double v, dvdr;
-        bond_potential(r1, v, dvdr);
-        v3j = -v / epsilon;
-        dv3j = -dvdr / epsilon;
+        bond_potential(pij, r1, v, dvdr);
+        v3j = -v / pij.epsilon;
+        dv3j = -dvdr / pij.epsilon;
       }
 
       for (int kk = jj + 1; kk < numshort; kk++) {
         const int k = neighshort[kk];
+        const Param3 &pik = param3[itype][type[k]];
+        const double pre = MIN(pij.lambda * pij.epsilon, pik.lambda * pik.epsilon);
+        if (pre == 0.0) continue;
         const double delr2[3] = {x[k][0] - xtmp, x[k][1] - ytmp, x[k][2] - ztmp};
         const double rsq2 = delr2[0] * delr2[0] + delr2[1] * delr2[1] + delr2[2] * delr2[2];
         const double r2 = sqrt(rsq2);
         double v3k = 1.0, dv3k = 0.0;
-        if (rsq2 > rminsq) {
+        if (rsq2 > pik.rminsq) {
           double v, dvdr;
-          bond_potential(r2, v, dvdr);
-          v3k = -v / epsilon;
-          dv3k = -dvdr / epsilon;
+          bond_potential(pik, r2, v, dvdr);
+          v3k = -v / pik.epsilon;
+          dv3k = -dvdr / pik.epsilon;
         }
 
         e3 += pre * v3j * v3k;

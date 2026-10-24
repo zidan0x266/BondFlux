@@ -108,7 +108,20 @@ lambda eps V3(r_ij) V3(r_ik) for every sticker with two partners (V3 = 1 below t
 -V/eps above). lambda = 1 makes the swap barrier-free; lambda > 1 adds a barrier of
 (lambda - 1) eps. By default V is shifted to zero at `rc` and rescaled to a depth of -eps;
 `eshift no` gives the unshifted form of Sciortino. Keywords: `bondable`,
-`rbond` (distance that defines a bond for the output), `eshift`.
+`rbond` (distance that defines a bond for the output; default: the cutoff of each pair),
+`eshift`, and `coeff`.
+
+Different sticker chemistries get their own parameters with
+`coeff itype jtype eps sigma n rc lambda` (repeatable, type ranges allowed; only bondable pairs);
+the fix arguments are the defaults for all other pairs. Each bond, and each leg of the
+three-body term, uses the parameters of its pair of types. The three-body term of a triplet
+j-i-k has the strength min(lambda_ij eps_ij, lambda_ik eps_ik), so that with lambda = 1 a swap
+between bonds of different strength has no barrier beyond their energy difference:
+
+```
+fix             tb stick bond/flux 3body 1.0 1.0 100 1.3 1.0 bondable 1 2 bondable 1 3 &
+                coeff 1 3 0.6 1.0 100 1.3 1.0
+```
 
 **Output**: mc gives a vector of 11 values (attempts, proposals, accepted shifts, swaps,
 formations and breakings, rejections, sum of energy changes, number of dynamic bonds,
@@ -128,7 +141,7 @@ modes give a per-atom array: partner ID, and number of moves (mc) or partners (3
 - LAMMPS cannot combine `bond_style quartic` with unbreakable bond styles in `hybrid`. A
   network with breakable quartic strands therefore needs quartic dynamic bonds, with rc below
   their breaking distance.
-- 3body mode needs `newton on` and `comm_modify cutoff` >= rc + skin.
+- 3body mode needs `newton on` and `comm_modify cutoff` >= rc + skin (the largest rc of all pairs).
 - Neither mode supports `run_style respa`.
 - The fix writes no restart data: define it again after `read_restart`.
 
@@ -156,7 +169,8 @@ python3 tests/test_mc_balance.py --variant kg            # exact detailed balanc
 mpirun -np 4 python3 tests/test_mc_balance.py --variant kg --form 0.5 --break 0.5 --ebond -20 --corner
 python3 tests/compare_acceptance_rules.py                 # barrier as gate vs. inside the Metropolis exponent
 python3 tests/test_3body.py                               # forces and virial vs. finite differences
-python3 tests/test_3body.py --flat                        # barrier-free swap for lambda = 1
+python3 tests/test_3body.py --flat                        # barrier-free swap for lambda = 1, also between unequal bonds
+python3 tests/test_3body.py --coeff                       # per-type-pair parameters (coeff keyword)
 ```
 
 ## Validation summary
@@ -171,8 +185,9 @@ python3 tests/test_3body.py --flat                        # barrier-free swap fo
   variation distance) for barriers >= kT.
 - **Kremer-Grest network**: the bond count is conserved during exchange. The number of
   accepted exchanges drops by exp(2) for each 2 kT of barrier.
-- **3body**: forces and virial agree with finite differences to 1e-9. For lambda = 1 the
-  potential energy stays at -eps while a bond swaps.
+- **3body**: forces and virial agree with finite differences to 1e-9, also with per-type-pair
+  parameters. For lambda = 1 the potential energy stays at -eps while a bond swaps; between
+  bonds of different strength it follows the mixing rule to 1e-16, without a barrier.
 - **Sciortino dumbbells**: the bond lifetime is 116.7 (reference: 116). lambda = 1.1 raises it
   to 404, and with lambda = 1.3 bonds practically do not exchange.
 
