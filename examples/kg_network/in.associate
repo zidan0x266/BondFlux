@@ -1,0 +1,60 @@
+# BondFlux example, stage 1: Kremer-Grest sticker melt -> dynamic network
+#
+# stickers (type 2) associate reversibly through fix bond/flux formation and
+# breaking moves; the association energy ebond (added per bond, on top of the
+# FENE bond energy) sets the equilibrium conversion.  The result is written to
+# network.data and used by in.exchange and in.dual_network.
+#
+# make the melt first:  python3 build_melt.py --chains 200 --out melt.data
+
+variable        seed index 12345
+variable        ebond index -24.0
+
+units           lj
+atom_style      bond
+boundary        p p p
+read_data       melt.data extra/bond/per/atom 2 extra/special/per/atom 4
+
+special_bonds   lj/coul 0.0 1.0 1.0
+bond_style      fene
+bond_coeff      * 30.0 1.5 1.0 1.0
+
+neighbor        0.4 bin
+neigh_modify    every 1 delay 0 check yes
+comm_modify     cutoff 3.2
+
+# soft push-off of the random-walk chains
+
+pair_style      soft 1.122462048309373
+pair_coeff      * * 0.0
+variable        prefactor equal ramp(0.0,100.0)
+fix             push all adapt 1 pair soft a * * v_prefactor
+velocity        all create 1.0 ${seed} mom yes rot yes dist gaussian
+fix             nve all nve/limit 0.1
+fix             lang all langevin 1.0 1.0 1.0 $(v_seed+1)
+timestep        0.005
+thermo          5000
+run             20000
+unfix           push
+
+# Kremer-Grest melt: WCA beads, FENE bonds
+
+pair_style      lj/cut 1.122462048309373
+pair_coeff      * * 1.0 1.0
+pair_modify     shift yes
+run             20000
+unfix           nve
+fix             nve all nve
+timestep        0.01
+run             50000
+
+# reversible association of stickers into a network
+
+group           stick type 2
+fix             flux stick bond/flux mc 100 2 1.3 1.0 $(v_seed+2) form 1.0 break 0.5 ebond ${ebond}
+thermo_style    custom step temp pe press f_flux[10] f_flux[5] f_flux[6] f_flux[3] f_flux[4]
+thermo_modify   norm no
+thermo          10000
+run             200000
+
+write_data      network.data nocoeff

@@ -1,0 +1,43 @@
+# Energy during bond swaps with fix bond/flux 3body (Sciortino, Eur. Phys. J. E 40, 3 (2017), Fig. 1b)
+# one A particle and two B particles in a small periodic box, NVE at kT ~ 0.01:
+# the A-B bond swaps between the two B particles while the total potential energy
+# stays at -eps; two-body (f_tb[1]) and three-body (f_tb[2]) energies compensate
+
+variable        n equal 150
+variable        seed index 2468
+
+units           lj
+atom_style      bond
+boundary        p p p
+
+region          box block 0 2.6 0 2.6 0 2.6
+create_box      2 box bond/types 1
+create_atoms    1 single 1.0 1.3 1.3 units box
+create_atoms    2 single $(1.0+2.0^(1.0/v_n)) 1.3 1.3 units box
+create_atoms    2 single 1.8 0.4 0.3 units box
+mass            * 1.0
+
+pair_style      mie/cut $(2.0^(1.0/v_n))
+pair_coeff      * * 1.0 1.0 $(2*v_n) ${n}
+pair_coeff      1 2 0.0 1.0 $(2*v_n) ${n}
+pair_modify     shift yes
+
+group           stick type 1 2
+fix             tb stick bond/flux 3body 1.0 1.0 ${n} 1.3 1.0 bondable 1 2
+
+comm_modify     cutoff 1.8
+neighbor        0.3 bin
+neigh_modify    every 1 delay 0 check yes
+
+velocity        all create 0.02 ${seed} mom yes rot no dist gaussian
+fix             nve all nve
+timestep        0.0002
+
+thermo_style    custom step pe f_tb[1] f_tb[2] etotal
+thermo_modify   norm no
+thermo          50
+variable        pe equal pe
+fix             out all ave/time 25 1 25 f_tb[1] f_tb[2] v_pe file swap_event.txt format ' %.10g'
+dump            d all custom 25 swap_event.dump id type x y z f_tb[1] f_tb[2]
+dump_modify     d sort id
+run             150000
