@@ -51,7 +51,7 @@ thermo_modify   norm no
 thermo          20000
 run             $(round(v_teq/v_dt))
 
-# production: weak thermostat (damping time 100, as in the 3b-potentials example)
+# production: weak thermostat (damping time 100)
 
 unfix           lang
 fix             lang all langevin ${kT} ${kT} 100.0 $(v_seed+4)
