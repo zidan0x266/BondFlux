@@ -103,17 +103,31 @@ class FixBondFlux : public Fix {
   double nreject_geom, nreject_energy, sum_de;
   bigint nlast;    // accepted moves (all procs) in the last MC step
 
+  // contact diagnostics: a sticker is in contact when it has a candidate for a move
+
+  int ncontact;                    // steps between contact checks, 0 = off
+  double **cstate;                 // per-atom: [0] in contact, [1] seen by an MC step
+  double contact_time, nepisode, nmissed;
+
   // three-body swap potential
 
+  enum { BOND_LJ, BOND_SW };       // shape of the two-body bond
+  static constexpr int MAXVAL3 = 7;
+
   struct Param3 {                  // parameters of one pair of sticker types
-    double epsilon, sigma, npow, rc, rcsq, lambda;
+    double epsilon, sigma, rc, rcsq, lambda;
+    double npow;                   // BOND_LJ: exponent n of the 2n-n form
+    double bigb, powp, powq, norm; // BOND_SW: B, p, q and the depth normalization
     double rmin, rminsq, phic, rbondsq;
   };
 
-  double epsilon, sigma, npow, rc3, lambda;    // defaults from the fix arguments
+  int form3;                       // BOND_LJ or BOND_SW, for all pairs
+  int nval3;                       // number of parameters per pair for this form
+  double val3[MAXVAL3];            // defaults from the fix arguments
   double rc3max;                   // largest cutoff of any bondable pair
   Param3 **param3;                 // param3[itype][jtype]
-  int eshift;                      // 1 = two-body potential shifted to zero at the cutoff
+  double ***strength3;             // three-body strength of triplets [center][j][k]
+  int eshift;                      // 1 = 2n-n bond shifted to zero at the cutoff
   double e2, e3, nbondpair, nmulti;
   int maxshort;
   int *neighshort;
@@ -140,11 +154,13 @@ class FixBondFlux : public Fix {
   double bond_energy(int, int, double);
   double pair_delta(int, int, double);
   double count_bonds();
+  void contact_check(int);
+  int has_candidate(int);
 
   // three-body helpers
 
   void threebody_compute(int, int);
-  void set_param3(Param3 &, double, double, double, double, double, double);
+  void set_param3(Param3 &, const double *, double, int);
   void bond_potential(const Param3 &, double, double &, double &);
   void work_grow();
 };

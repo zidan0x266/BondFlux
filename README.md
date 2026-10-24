@@ -83,7 +83,8 @@ fix             tb stick bond/flux 3body 1.0 1.0 100 1.3 1.0 bondable 1 2
 
 ```
 fix ID group-ID bond/flux mc    Nevery btype rc T seed keyword value ...
-fix ID group-ID bond/flux 3body eps sigma n rc lambda keyword value ...
+fix ID group-ID bond/flux 3body [lj] eps sigma n rc lambda keyword value ...
+fix ID group-ID bond/flux 3body sw eps sigma B p q rc lambda keyword value ...
 ```
 
 **mc**: every `Nevery` steps each sticker (atom of the fix group) is offered one move. A
@@ -102,6 +103,13 @@ dynamic bond type and `T` the Metropolis temperature (use the thermostat set poi
 | `prob` | additional attempt probability | 1 |
 | `rmin` | lower end of the reaction window | 0 |
 | `molecule` | `any`, `inter`, `intra` | `any` |
+| `contact` | `Ncheck`: contact diagnostics every `Ncheck` steps (must divide `Nevery`) | off |
+
+A sticker is in contact while it has a candidate for its move. `contact` measures the time in
+contact, the contact episodes, and the episodes that end before any MC step sees them. Their
+fraction f_miss should be small: otherwise `Nevery` is too coarse for the contact dynamics and
+filters out short contacts. k_cond is the number of accepted exchanges and formations per unit
+contact time.
 
 **3body**: V(r) = 4 eps [(sigma/r)^2n - (sigma/r)^n] between bondable stickers, plus
 lambda eps V3(r_ij) V3(r_ik) for every sticker with two partners (V3 = 1 below the minimum,
@@ -109,23 +117,30 @@ lambda eps V3(r_ij) V3(r_ik) for every sticker with two partners (V3 = 1 below t
 (lambda - 1) eps. By default V is shifted to zero at `rc` and rescaled to a depth of -eps;
 `eshift no` gives the unshifted form of Sciortino. Keywords: `bondable`,
 `rbond` (distance that defines a bond for the output; default: the cutoff of each pair),
-`eshift`, and `coeff`.
+`eshift`, `coeff` and `triplet`.
 
-Different sticker chemistries get their own parameters with
-`coeff itype jtype eps sigma n rc lambda` (repeatable, type ranges allowed; only bondable pairs);
-the fix arguments are the defaults for all other pairs. Each bond, and each leg of the
-three-body term, uses the parameters of its pair of types. The three-body term of a triplet
-j-i-k has the strength min(lambda_ij eps_ij, lambda_ik eps_ik), so that with lambda = 1 a swap
-between bonds of different strength has no barrier beyond their energy difference:
+The bond can also have the Stillinger-Weber shape (`3body sw`):
+V(r) = eps [B (sigma/r)^p - (sigma/r)^q] exp(sigma/(r - rc)) / N, with p > q >= 0. It goes to zero
+smoothly at `rc`, and N sets its depth at the minimum, found numerically, to -eps.
+
+Different sticker chemistries get their own parameters with `coeff itype jtype values`, with
+the same values as the fix arguments of the bond shape (repeatable, type ranges allowed, only
+bondable pairs); the fix arguments are the defaults for all other pairs. Each bond, and each
+leg of the three-body term, uses the parameters of its pair of types. The three-body term of
+a triplet j-i-k has the strength min(lambda_ij eps_ij, lambda_ik eps_ik), so that with lambda = 1
+a swap between bonds of different strength has no barrier beyond their energy difference;
+`triplet itype jtype ktype strength` sets lambda eps of the triplets centered on type i with
+legs of types j and k instead:
 
 ```
 fix             tb stick bond/flux 3body 1.0 1.0 100 1.3 1.0 bondable 1 2 bondable 1 3 &
-                coeff 1 3 0.6 1.0 100 1.3 1.0
+                coeff 1 3 0.6 1.0 100 1.3 1.0 triplet 1 2 3 0.8
 ```
 
-**Output**: mc gives a vector of 11 values (attempts, proposals, accepted shifts, swaps,
+**Output**: mc gives a vector of 16 values (attempts, proposals, accepted shifts, swaps,
 formations and breakings, rejections, sum of energy changes, number of dynamic bonds,
-accepted moves in the last MC step). 3body gives the energy as a scalar, and a vector
+accepted moves in the last MC step; with `contact`: contact time, episodes, missed episodes,
+k_cond, f_miss). 3body gives the energy as a scalar, and a vector
 (two-body and three-body energy, bonded pairs, stickers with more than one partner). Both
 modes give a per-atom array: partner ID, and number of moves (mc) or partners (3body).
 
@@ -170,7 +185,9 @@ mpirun -np 4 python3 tests/test_mc_balance.py --variant kg --form 0.5 --break 0.
 python3 tests/compare_acceptance_rules.py                 # barrier as gate vs. inside the Metropolis exponent
 python3 tests/test_3body.py                               # forces and virial vs. finite differences
 python3 tests/test_3body.py --flat                        # barrier-free swap for lambda = 1, also between unequal bonds
-python3 tests/test_3body.py --coeff                       # per-type-pair parameters (coeff keyword)
+python3 tests/test_3body.py --coeff                       # per-type-pair parameters (coeff and triplet keywords)
+python3 tests/test_3body.py --form sw                     # Stillinger-Weber shaped bond (also with --coeff)
+python3 tests/test_contact.py                             # contact diagnostics vs. an exact recount
 ```
 
 ## Validation summary
@@ -185,9 +202,14 @@ python3 tests/test_3body.py --coeff                       # per-type-pair parame
   variation distance) for barriers >= kT.
 - **Kremer-Grest network**: the bond count is conserved during exchange. The number of
   accepted exchanges drops by exp(2) for each 2 kT of barrier.
-- **3body**: forces and virial agree with finite differences to 1e-9, also with per-type-pair
-  parameters. For lambda = 1 the potential energy stays at -eps while a bond swaps; between
-  bonds of different strength it follows the mixing rule to 1e-16, without a barrier.
+- **Contact diagnostics**: contact time, episodes and missed episodes equal an exact recount
+  from the trajectory on 1, 2 and 4 MPI ranks. In the Kremer-Grest network, MC every 100 steps
+  misses 42 % of the contact episodes resolved every 10 steps; MC every 10 steps misses none.
+- **3body**: forces and virial agree with finite differences to 1e-9, for both bond shapes and
+  with per-type-pair and per-triplet parameters. For lambda = 1 the potential energy stays at
+  -eps while a bond swaps; between bonds of different strength it follows the mixing rule to
+  1e-16, without a barrier. The Stillinger-Weber shaped bond has its depth -eps at the minimum
+  to 1e-12.
 - **Sciortino dumbbells**: the bond lifetime is 116.7 (reference: 116). lambda = 1.1 raises it
   to 404, and with lambda = 1.3 bonds practically do not exchange.
 

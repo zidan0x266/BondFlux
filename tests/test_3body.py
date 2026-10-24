@@ -12,10 +12,15 @@
      to the defaults changes nothing
   6. mixing rule (--flat): with lambda = 1, a weaker partner approaching a stronger
      bond leaves the energy flat, and a stronger partner approaching a weaker bond
-     lowers it monotonically, so the swap has no barrier
+     lowers it monotonically, so the swap has no barrier; a triplet keyword replaces
+     the strength of the mixed triplet exactly
+  7. Stillinger-Weber shaped bond (--form sw): checks 1, 2, 4 and 5 with that shape;
+     --flat also checks its depth -eps at the minimum (found independently here) and
+     its flat landscape for lambda = 1
 
 Run:  python3 test_3body.py ;  mpirun -np 4 python3 test_3body.py ;  python3 test_3body.py --flat
       python3 test_3body.py --coeff ;  mpirun -np 4 python3 test_3body.py --coeff
+      python3 test_3body.py --form sw ;  python3 test_3body.py --form sw --coeff
 """
 
 import argparse
@@ -28,9 +33,34 @@ from lammps import LMP_STYLE_GLOBAL, LMP_TYPE_VECTOR, lammps
 RC3 = 1.3
 # C stickers (type 4) bond to A (type 1) with their own parameters: eps sigma n rc lambda
 COEFF_AC = (1.6, 0.95, 18.0, 1.25, 1.2)
+# Stillinger-Weber shaped bond: eps sigma B p q rc (lambda is added); A-C pairs of --coeff
+SW = (1.0, 1.0, 0.5, 12.0, 6.0, 1.5)
+SW_AC = (1.6, 0.95, 0.6, 10.0, 4.0, 1.4, 1.2)
 
 
-def setup(lmp, grid, box, npow, lam, pos, types, extra=''):
+def sw_rmin(eps, sigma, bigb, p, q, rc):
+    """minimum of the Stillinger-Weber shaped bond, by bisection on its slope"""
+    def slope(r):
+        sp, sq = bigb * (sigma / r) ** p, (sigma / r) ** q
+        return (-p * sp + q * sq) / r - sigma * (sp - sq) / (r - rc) ** 2
+    rs = np.linspace(min(0.3 * sigma, 0.5 * rc), rc, 4001)[:-1]
+    sl = np.array([slope(r) for r in rs])
+    m = np.where((sl[:-1] < 0) & (sl[1:] >= 0))[0][0]
+    a, b = rs[m], rs[m + 1]
+    for _ in range(200):
+        c = 0.5 * (a + b)
+        a, b = (c, b) if slope(c) < 0 else (a, c)
+    return 0.5 * (a + b)
+
+
+def params(form, npow, lam):
+    """fix arguments after 3body for the chosen bond shape"""
+    if form == 'sw':
+        return 'sw ' + ' '.join(f'{v:g}' for v in SW) + f' {lam:g}'
+    return f'1.0 1.0 {npow:g} {RC3} {lam:g}'
+
+
+def setup(lmp, grid, box, npow, lam, pos, types, extra='', form='lj'):
     """A (1) and B (2) stickers, inert beads (3), and C stickers (4) that bond to A;
     extra holds additional fix keywords, e.g. 'bondable 1 4 coeff 1 4 ...'"""
     lmp.commands_string(f"""
@@ -55,7 +85,7 @@ bond_coeff 1 100.0 1.0
 group stick type 1 2 4
 comm_modify cutoff 2.5
 neighbor 0.3 bin
-fix tb stick bond/flux 3body 1.0 1.0 {npow} {RC3} {lam} bondable 1 2 {extra}
+fix tb stick bond/flux 3body {params(form, npow, lam)} bondable 1 2 {extra}
 compute pfix all pressure NULL fix
 thermo_style custom step pe c_pfix[1] c_pfix[2] c_pfix[3] c_pfix[4]
 thermo_modify norm no
@@ -75,6 +105,7 @@ def main():
     ap.add_argument('--flat', action='store_true', help='run only the flat-landscape checks')
     ap.add_argument('--coeff', action='store_true',
                     help='add C stickers (type 4) with their own parameters for A-C pairs')
+    ap.add_argument('--form', choices=['lj', 'sw'], default='lj', help='shape of the bond')
     args = ap.parse_args()
     if args.flat:
         return flat_landscape()
@@ -99,34 +130,37 @@ def main():
             types.append(seq[len(pos) - 1])
     pos = np.array(pos) + center
     natoms = len(pos)
-    extra = 'bondable 1 4 coeff 1 4 ' + ' '.join(f'{v:g}' for v in COEFF_AC) if args.coeff else ''
-    tag = '_coeff' if args.coeff else ''
+    coeff_ac = SW_AC if args.form == 'sw' else COEFF_AC
+    extra = ('bondable 1 4 coeff 1 4 ' + ' '.join(f'{v:g}' for v in coeff_ac) +
+             ' triplet 1 2 4 0.8') if args.coeff else ''
+    tag = ('_coeff' if args.coeff else '') + ('_sw' if args.form == 'sw' else '')
 
     # A centers with both a B and a C within their cutoffs exercise the mixing rule
     mixed = 0
     if args.coeff:
         for i in np.where(np.array(types) == 1)[0]:
             d = np.linalg.norm(pos - pos[i], axis=1)
-            near_b = np.any((np.array(types) == 2) & (d < RC3))
-            near_c = np.any((np.array(types) == 4) & (d < COEFF_AC[3]))
+            near_b = np.any((np.array(types) == 2) & (d < (SW[5] if args.form == 'sw' else RC3)))
+            near_c = np.any((np.array(types) == 4) & (d < coeff_ac[-2]))
             mixed += int(near_b and near_c)
 
     # a coeff equal to the defaults must not change anything
     same = True
     if args.coeff:
         ref = lammps(cmdargs=['-log', 'none', '-screen', 'none'])
-        setup(ref, grid, box, args.npow, args.lam, pos, types, extra)
+        setup(ref, grid, box, args.npow, args.lam, pos, types, extra, args.form)
         f_ref = np.ctypeslib.as_array(ref.gather_atoms('f', 1, 3)).reshape(natoms, 3).copy()
         e_ref = ref.extract_fix('tb', 0, 0)
         ref.close()
         dup = lammps(cmdargs=['-log', 'none', '-screen', 'none'])
+        same_ab = params(args.form, args.npow, args.lam).removeprefix('sw ')
         setup(dup, grid, box, args.npow, args.lam, pos, types,
-              extra + f' coeff 1 2 1.0 1.0 {args.npow:g} {RC3} {args.lam:g}')
+              extra + f' coeff 1 2 {same_ab}', args.form)
         f_dup = np.ctypeslib.as_array(dup.gather_atoms('f', 1, 3)).reshape(natoms, 3).copy()
         same = (dup.extract_fix('tb', 0, 0) == e_ref) and np.array_equal(f_dup, f_ref)
         dup.close()
 
-    setup(lmp, grid, box, args.npow, args.lam, pos, types, extra)
+    setup(lmp, grid, box, args.npow, args.lam, pos, types, extra, args.form)
     f = np.ctypeslib.as_array(lmp.gather_atoms('f', 1, 3)).reshape(natoms, 3).copy()
     pe0, efix0 = energies(lmp)
     vol = box[0] * box[1] * box[2]
@@ -183,7 +217,8 @@ def main():
         mpierr = np.max(np.abs(np.load(ref) - f))
         mpi_msg = f', max |F(np{nprocs}) - F(np1)| = {mpierr:.2e}'
 
-    label = f'3body n={args.npow:g} lambda={args.lam:g}' + (' coeff A-C' if args.coeff else '')
+    label = (f'3body sw lambda={args.lam:g}' if args.form == 'sw' else
+             f'3body n={args.npow:g} lambda={args.lam:g}') + (' coeff A-C' if args.coeff else '')
     print(f'{label} np={nprocs}: E_fix={efix0:.6f} '
           f'(E2={stats[0]:.4f} E3={stats[1]:.4f}), bonded pairs={stats[2]:.0f}, '
           f'multiply bonded={stats[3]:.0f}')
@@ -201,17 +236,21 @@ def main():
     return 0 if ok else 1
 
 
-def approach(bonded, incoming, extra=''):
+def approach(bonded, incoming, extra='', form='lj'):
     """A bonded to a partner of type `bonded` at its potential minimum; a partner of type
-    `incoming` approaches A from the opposite side (n = 100, lambda = 1). Returns rows of
-    (distance, total energy, two-body energy), from far to near."""
+    `incoming` approaches A from the opposite side (n = 100 or the SW shape, lambda = 1).
+    Returns rows of (distance, total energy, two-body energy), from far to near."""
     npow = 100.0
-    rmin = {2: 2 ** (1 / npow), 4: 2 ** (1 / npow)}
-    rcut = {2: RC3, 4: RC3}
+    if form == 'sw':
+        r0 = sw_rmin(*SW)
+        rmin, rcut = {2: r0, 4: r0}, {2: SW[5], 4: SW[5]}
+    else:
+        rmin = {2: 2 ** (1 / npow), 4: 2 ** (1 / npow)}
+        rcut = {2: RC3, 4: RC3}
     lmp = lammps(cmdargs=['-log', 'none', '-screen', 'none'])
     pos = [np.array([6.0, 6.0, 6.0]), np.array([6.0 + rmin[bonded], 6.0, 6.0]),
            np.array([4.0, 6.0, 6.0])]
-    setup(lmp, (1, 1, 1), [12.0, 12.0, 12.0], npow, 1.0, pos, [1, bonded, incoming], extra)
+    setup(lmp, (1, 1, 1), [12.0, 12.0, 12.0], npow, 1.0, pos, [1, bonded, incoming], extra, form)
     out = []
     for r in np.linspace(rcut[incoming] + 0.05, rmin[incoming] + 1e-3, 25):
         lmp.command(f'set atom 3 x {6.0 - r}')
@@ -249,6 +288,22 @@ def flat_landscape():
           f'{strong_in[0, 1]:.6f} to {strong_in[-1, 1]:.6f}, largest rise {max(rise, 0.0):.1e}, '
           f'max |E - E_expected| {dev:.1e}')
     ok &= (spread < 1e-10) and (rise < 1e-12) and (dev < 1e-10)
+
+    # triplet keyword: strength 1.0 instead of min(1.0, 0.6) for A centers with B and C legs;
+    #   C approaching A-B: E = -1 - 0.6 V3_AC + 1.0 V3_AC, with V3_AC = -(E2 + 1) / 0.6
+    trip = approach(2, 4, extra + ' triplet 1 2 4 1.0')
+    v3 = -(trip[:, 2] + 1.0) / 0.6
+    dev = np.max(np.abs(trip[:, 1] - (-1.0 + 0.4 * v3)))
+    print(f'triplet strength 1.0 for A with B and C legs: barrier {trip[:, 1].max() + 1.0:.4f}, '
+          f'max |E - E_expected| {dev:.1e}')
+    ok &= dev < 1e-10
+
+    # Stillinger-Weber shaped bond: depth -eps at the minimum found here, flat for lambda = 1
+    sw = approach(2, 2, form='sw')
+    spread = np.ptp(sw[:, 1])
+    print(f'sw bond (B=0.5, p=12, q=6, rc=1.5): rmin = {sw_rmin(*SW):.12f}, E_total in '
+          f'[{sw[:, 1].min():.12f}, {sw[:, 1].max():.12f}]')
+    ok &= (spread < 1e-10) and (abs(sw[0, 1] + 1.0) < 1e-12)
 
     print('PASS' if ok else 'FAIL', 'flat landscape')
     return 0 if ok else 1
