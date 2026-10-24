@@ -15,7 +15,7 @@ BondFlux is a single LAMMPS fix style, `fix bond/flux`, with two modes:
 The Monte Carlo moves satisfy detailed balance with respect to the full force field (bond
 style, pair style and `special_bonds` weights), in serial and in parallel. A reaction barrier
 changes the exchange rate without changing the equilibrium. See the
-[manual](doc/bondflux-manual.pdf) for the methods and the validation.
+[manual](manual.pdf) for the methods and the validation.
 
 ## Repository layout
 
@@ -24,7 +24,7 @@ src/        fix_bond_flux.cpp, fix_bond_flux.h   the LAMMPS fix
 examples/   kg_network/   Kremer-Grest sticker melt -> dynamic network -> exchange (mc)
             dumbbells/    Sciortino dumbbell benchmark and swap-event energies (3body)
 tests/      detailed-balance and acceptance-rule tests (mc), force/virial tests (3body)
-doc/        manual (PDF and LaTeX source), figure script, validation data (HDF5)
+manual.pdf  user manual: methods, LAMMPS commands and validation tests
 ```
 
 ## Building LAMMPS with BondFlux
