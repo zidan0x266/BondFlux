@@ -4,6 +4,9 @@
 usage:
   make_figures.py collect --runs RUNDIR     read raw outputs, write data/bondflux_validation.h5
   make_figures.py plot                      draw figures/*.pdf from data/bondflux_validation.h5
+  latexmk -pdf bondflux-manual.tex          build the manual (Tufte-LaTeX class tufte-handout)
+
+plot typesets the figure text with LaTeX (text.usetex, mathpazo), so it needs a TeX installation.
 
 RUNDIR layout (outputs of the examples and tests):
   RUNDIR/mc_balance_kg_formbreak.h5            tests/test_mc_balance.py --save
@@ -124,7 +127,10 @@ def plot():
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    plt.rcParams.update({'font.size': 9, 'axes.labelsize': 9, 'legend.fontsize': 8,
+    # text is typeset by LaTeX in Palatino, the font of the Tufte-LaTeX manual
+    plt.rcParams.update({'text.usetex': True, 'font.family': 'serif',
+                         'text.latex.preamble': r'\usepackage{mathpazo}',
+                         'font.size': 9, 'axes.labelsize': 9, 'legend.fontsize': 8,
                          'legend.frameon': False, 'lines.linewidth': 1.5, 'figure.dpi': 150})
     colors = ['#1b6ca8', '#d1495b', '#2e933c', '#e09f3e', '#6c4f9c']
     ref = dict(color='k', ls='--', lw=1.2)
