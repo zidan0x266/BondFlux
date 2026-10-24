@@ -7,9 +7,12 @@ usage:
 
 RUNDIR layout (outputs of the examples and tests):
   RUNDIR/mc_balance_kg_formbreak.h5            tests/test_mc_balance.py --save
+  RUNDIR/kg/log.associate, partners_Ea*.dump     examples/kg_network/in.associate, in.exchange
   RUNDIR/dumb/partners_lambda{1.0,1.1,1.3}.dump  examples/dumbbells/in.dumbbells
   RUNDIR/swap/swap_event.txt, swap_event.dump    examples/dumbbells/in.swap_event
-  RUNDIR/kg/log.associate, partners_Ea*.dump     examples/kg_network/in.associate, in.exchange
+
+Every figure has the same size (WIDTH x HEIGHT inches, placed at the same width in the manual)
+and the same axes boxes, so one- and two-panel figures line up.
 """
 
 import argparse
@@ -72,23 +75,6 @@ def collect(runs):
             for k, v in src.attrs.items():
                 g.attrs[k] = v
 
-        g = h5.create_group('dumbbells')
-        for lam in ('1.0', '1.1', '1.3'):
-            t, nb = bond_autocorrelation(os.path.join(runs, 'dumb', f'partners_lambda{lam}.dump'),
-                                         1.0, 1000.0)
-            s = g.create_group(f'lambda_{lam}')
-            s['t'], s['nb'] = t, nb
-            s.attrs['tau'] = fit_tau(t, nb)
-
-        d = np.loadtxt(os.path.join(runs, 'swap', 'swap_event.txt'))
-        g = h5.create_group('swap_event')
-        g['t'] = d[:, 0] * 0.0002
-        g['e2'], g['e3'], g['pe'] = d[:, 1], d[:, 2], d[:, 3]
-
-        if not os.path.exists(os.path.join(runs, 'kg', 'log.associate')):
-            print('no kg_network runs found, skipping')
-            print(f'wrote {DATA}')
-            return
         g = h5.create_group('kg_network')
         blocks = thermo_blocks(os.path.join(runs, 'kg', 'log.associate'))
         header, a = blocks[-1]
@@ -104,7 +90,34 @@ def collect(runs):
             s.attrs['tau'] = fit_tau(t, nb, 0.1, 0.9)
             hdr, b = thermo_blocks(os.path.join(runs, 'kg', f'log.exchange{m.group(1)}'))[-1]
             s['nbonds'] = b[:, hdr.index('f_flux[10]')]
+
+        g = h5.create_group('dumbbells')
+        for lam in ('1.0', '1.1', '1.3'):
+            t, nb = bond_autocorrelation(os.path.join(runs, 'dumb', f'partners_lambda{lam}.dump'),
+                                         1.0, 1000.0)
+            s = g.create_group(f'lambda_{lam}')
+            s['t'], s['nb'] = t, nb
+            s.attrs['tau'] = fit_tau(t, nb)
+
+        d = np.loadtxt(os.path.join(runs, 'swap', 'swap_event.txt'))
+        g = h5.create_group('swap_event')
+        g['t'] = d[:, 0] * 0.0002
+        g['e2'], g['e3'], g['pe'] = d[:, 1], d[:, 2], d[:, 3]
     print(f'wrote {DATA}')
+
+
+WIDTH, HEIGHT = 6.4, 2.6
+# axes boxes (figure fractions) shared by all figures; a one-panel figure spans both panels
+BOX = dict(left=0.105, right=0.985, bottom=0.17, top=0.91, wspace=0.32)
+
+
+def panels(plt, n):
+    fig = plt.figure(figsize=(WIDTH, HEIGHT))
+    axs = fig.subplots(1, n, gridspec_kw=BOX, squeeze=False)[0]
+    if n > 1:
+        for ax, tag in zip(axs, 'abcd'):
+            ax.text(0.0, 1.03, f'({tag})', transform=ax.transAxes, ha='left', va='bottom')
+    return fig, axs
 
 
 def plot():
@@ -112,8 +125,10 @@ def plot():
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     plt.rcParams.update({'font.size': 9, 'axes.labelsize': 9, 'legend.fontsize': 8,
-                         'figure.dpi': 150, 'savefig.bbox': 'tight'})
+                         'legend.frameon': False, 'lines.linewidth': 1.5, 'figure.dpi': 150})
     colors = ['#1b6ca8', '#d1495b', '#2e933c', '#e09f3e', '#6c4f9c']
+    ref = dict(color='k', ls='--', lw=1.2)
+    tlabel = r'time $t$ [$\tau$]'
     os.makedirs(FIGS, exist_ok=True)
 
     moves_schematic(plt, colors)
@@ -123,65 +138,27 @@ def plot():
         g = h5['mc_balance']
         order = np.argsort(-g['p_exact'][()])
         x = np.arange(len(order))
-        fig, ax = plt.subplots(figsize=(6.2, 2.6))
+        fig, (ax,) = panels(plt, 1)
         ax.bar(x - 0.2, g['p_exact'][()][order], 0.4, color=colors[0], label='exact Boltzmann')
         ax.bar(x + 0.2, g['p_mc'][()][order], 0.4, yerr=g['p_mc_err'][()][order], color=colors[1],
                label='fix bond/flux (4 MPI ranks)', error_kw=dict(lw=0.6, capsize=1.5))
-        nb = g['nbonds'][()][order]
-        ax.set_xticks(x, [f'{n}' for n in nb])
+        ax.set_xticks(x, [f'{n}' for n in g['nbonds'][()][order]])
+        ax.set_xlim(-0.6, len(order) - 0.4)
         ax.set_xlabel('topology (number of dynamic bonds), sorted by probability')
         ax.set_ylabel('probability')
         ax.set_yscale('log')
         ax.set_ylim(1e-4, 1)
-        ax.legend(frameon=False)
+        ax.legend()
         fig.savefig(os.path.join(FIGS, 'mc_balance.pdf'))
         plt.close(fig)
 
-        # dumbbells
-        g = h5['dumbbells']
-        fig, ax = plt.subplots(figsize=(3.4, 2.6))
-        for c, lam in zip(colors, ('1.0', '1.1', '1.3')):
-            s = g[f'lambda_{lam}']
-            tau = s.attrs['tau']
-            lab = rf'$\lambda={lam}$' + (rf', $\tau={tau:.0f}$' if np.isfinite(tau) else '')
-            ax.semilogy(s['t'][()], s['nb'][()], color=c, label=lab)
-        t = g['lambda_1.0']['t'][()]
-        ax.semilogy(t, np.exp(-t / 116.0), 'k--', lw=0.8, label=r'Sciortino: $e^{-t/116}$')
-        ax.set_xlim(0, 600)
-        ax.set_ylim(1e-3, 1.1)
-        ax.set_xlabel(r'time $t$ [$\sqrt{m\sigma^2/\epsilon}$]')
-        ax.set_ylabel(r'bond autocorrelation $n_b(t)$')
-        ax.legend(frameon=False)
-        fig.savefig(os.path.join(FIGS, 'dumbbells.pdf'))
-        plt.close(fig)
-
-        # swap event
-        g = h5['swap_event']
-        t = g['t'][()]
-        e3 = g['e3'][()]
-        i = np.argmax(e3 > 0.05)
-        sel = (t > t[i] - 0.6) & (t < t[i] + 1.4)
-        fig, ax = plt.subplots(figsize=(3.4, 2.6))
-        ax.plot(t[sel], g['e2'][()][sel], color=colors[0], label='two-body')
-        ax.plot(t[sel], e3[sel], color=colors[1], label='three-body')
-        ax.plot(t[sel], g['pe'][()][sel], color='k', lw=1.8, ls='--', label='total potential energy')
-        ax.set_xlabel(r'time $t$ [$\sqrt{m\sigma^2/\epsilon}$]')
-        ax.set_ylabel(r'energy / $\epsilon$')
-        ax.legend(frameon=False, loc='center right')
-        fig.savefig(os.path.join(FIGS, 'swap_event.pdf'))
-        plt.close(fig)
-
-        # KG network: association and exchange
-        if 'kg_network' not in h5:
-            print(f'wrote figures to {FIGS} (no kg_network data)')
-            return
+        # KG network: (a) formation and breaking, (b) exchange only
         g = h5['kg_network']
-        fig, axs = plt.subplots(1, 2, figsize=(6.4, 2.5))
+        fig, axs = panels(plt, 2)
         step = g['associate_step'][()]
         axs[0].plot((step - step[0]) * 0.01, g['associate_nbonds'][()], color=colors[0])
-        axs[0].set_xlabel(r'time since association started [$\tau$]')
+        axs[0].set_xlabel(tlabel)
         axs[0].set_ylabel('dynamic bonds')
-        axs[0].set_title('formation + breaking', fontsize=9)
         keys = sorted([k for k in g if k.startswith('exchange_Ea_')],
                       key=lambda k: float(k.split('_')[-1]))
         for c, k in zip(colors, keys):
@@ -189,20 +166,50 @@ def plot():
             ea = float(k.split('_')[-1])
             axs[1].semilogy(s['t'][()], s['c'][()], color=c,
                             label=rf'$E_a={ea:g}\,\epsilon$, $\tau_x={s.attrs["tau"]:.0f}$')
-        axs[1].set_xlabel(r'time [$\tau$]')
+        axs[1].set_xlabel(tlabel)
         axs[1].set_ylabel(r'bond autocorrelation $C(t)$')
-        axs[1].set_ylim(5e-3, 1.1)
-        axs[1].set_title('exchange only (bond number fixed)', fontsize=9)
-        axs[1].legend(frameon=False)
-        fig.tight_layout()
+        axs[1].set_ylim(1e-3, 1.1)
+        axs[1].legend(loc='lower left')
         fig.savefig(os.path.join(FIGS, 'kg_network.pdf'))
+        plt.close(fig)
+
+        # three-body potential: (a) dumbbell bond autocorrelation, (b) energies during a swap
+        fig, axs = panels(plt, 2)
+        g = h5['dumbbells']
+        for c, lam in zip(colors, ('1.0', '1.1', '1.3')):
+            s = g[f'lambda_{lam}']
+            tau = s.attrs['tau']
+            lab = rf'$\lambda={lam}$' + (rf', $\tau_x={tau:.0f}$' if np.isfinite(tau) else '')
+            axs[0].semilogy(s['t'][()], s['nb'][()], color=c, label=lab)
+        t = g['lambda_1.0']['t'][()]
+        axs[0].semilogy(t, np.exp(-t / 116.0), **ref, label=r'Sciortino: $e^{-t/116}$')
+        axs[0].set_xlim(0, 600)
+        axs[0].set_ylim(1e-3, 1.1)
+        axs[0].set_xlabel(tlabel)
+        axs[0].set_ylabel(r'bond autocorrelation $C(t)$')
+        axs[0].legend(loc='lower left')
+
+        g = h5['swap_event']
+        t = g['t'][()]
+        e3 = g['e3'][()]
+        i = np.argmax(e3 > 0.05)
+        sel = (t > t[i] - 0.3) & (t < t[i] + 1.7)
+        t0 = t[sel][0]
+        axs[1].plot(t[sel] - t0, g['e2'][()][sel], color=colors[0], label='two-body')
+        axs[1].plot(t[sel] - t0, e3[sel], color=colors[1], label='three-body')
+        axs[1].plot(t[sel] - t0, g['pe'][()][sel], **ref, label='potential energy')
+        axs[1].set_xlim(0, t[sel][-1] - t0)
+        axs[1].set_xlabel(tlabel)
+        axs[1].set_ylabel(r'energy / $\epsilon$')
+        axs[1].legend(loc='upper right')
+        fig.savefig(os.path.join(FIGS, 'dumbbells.pdf'))
         plt.close(fig)
     print(f'wrote figures to {FIGS}')
 
 
 def moves_schematic(plt, colors):
-    """the four Monte Carlo moves of fix bond/flux, before -> after"""
-    sticker, other, bondc = colors[1], '#9aa5b1', colors[0]
+    """the four Monte Carlo moves of fix bond/flux, before -> after; exchange on top"""
+    sticker, bondc = colors[1], colors[0]
     panels = [
         ('shift', {'i': (0, 0), 'k': (1, 0), 'j': (-0.55, 0.85)}, [('i', 'k')], [('i', 'j')]),
         ('swap', {'i': (0, 0), 'k': (1, 0), 'j': (0, 1), 'l': (1, 1)}, [('i', 'k'), ('j', 'l')],
@@ -210,16 +217,18 @@ def moves_schematic(plt, colors):
         ('formation', {'i': (0, 0), 'j': (1, 0)}, [], [('i', 'j')]),
         ('breaking', {'i': (0, 0), 'k': (1, 0)}, [('i', 'k')], []),
     ]
-    fig, axs = plt.subplots(1, 4, figsize=(7.0, 1.9))
+    fig = plt.figure(figsize=(WIDTH, HEIGHT))
+    axs = fig.subplots(2, 2, gridspec_kw=dict(left=0.02, right=0.98, bottom=0.02, top=0.92,
+                                              wspace=0.1, hspace=0.3)).ravel()
     for ax, (name, pos, before, after) in zip(axs, panels):
         for shift, bonds in ((0.0, before), (2.9, after)):
             for a, b in bonds:
                 xa, ya = pos[a]
                 xb, yb = pos[b]
-                ax.plot([xa + shift, xb + shift], [ya, yb], color=bondc, lw=2.5, zorder=1)
+                ax.plot([xa + shift, xb + shift], [ya, yb], color=bondc, lw=3, zorder=1)
             for lab, (x, y) in pos.items():
                 ax.add_patch(plt.Circle((x + shift, y), 0.22, color=sticker, zorder=2))
-                ax.text(x + shift, y, lab, ha='center', va='center', color='white', fontsize=8,
+                ax.text(x + shift, y, lab, ha='center', va='center', color='white', fontsize=9,
                         zorder=3)
         ax.annotate('', xy=(2.15, 0.5), xytext=(1.45, 0.5),
                     arrowprops=dict(arrowstyle='->', color='k', lw=1.0))

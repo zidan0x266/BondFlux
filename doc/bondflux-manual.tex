@@ -49,7 +49,7 @@ short-ranged pair attraction. A three-body repulsion enforces one bond per stick
 bond swap barrier-free, so standard MD produces the exchange~\cite{Sciortino2017}. BondFlux provides
 both routes in the same fix (Table~\ref{tab:modes}).
 
-\begin{table}[h]
+\begin{table}[htb]
 \centering
 \caption{The two modes of \cmd{fix bond/flux}.}\label{tab:modes}
 \small
@@ -87,12 +87,12 @@ near $i$ after it, with $j$ and $k$ exchanged, and both are inside the window. C
 bondable (\cmd{bondable} types, \cmd{molecule} rule) and must not already be bonded to $i$ through
 another bond.
 
-\begin{figure}[h]
+\begin{figure}[htb]
 \centering
-\includegraphics[width=0.95\textwidth]{figures/moves.pdf}
+\includegraphics[width=0.9\textwidth]{figures/moves.pdf}
 \caption{Monte Carlo moves of \cmd{fix bond/flux mc}: sticker $i$ is the sticker offered the move;
-dynamic bonds are drawn as lines. Exchange (shift, swap) keeps the number of dynamic bonds; formation
-and breaking change it.}\label{fig:moves}
+dynamic bonds are drawn as lines. Top: exchange (shift, swap), which keeps the number of dynamic
+bonds. Bottom: formation and breaking, which change it.}\label{fig:moves}
 \end{figure}
 
 \paragraph{Energy change.}
@@ -181,7 +181,7 @@ fix ID group-ID bond/flux 3body eps sigma n rc lambda keyword value ...
   \cmd{rc} = cutoff; \cmd{lambda} = three-body strength.
 \end{itemize}
 
-\begin{table}[h]
+\begin{table}[htb]
 \centering
 \caption{Keywords.}\label{tab:keywords}
 \begin{tabular}{llll}
@@ -296,7 +296,9 @@ developed and tested with LAMMPS stable 30 Sep 2026.
 \section{Validity tests}\label{sec:tests}
 
 The scripts are in \cmd{tests/} and \cmd{examples/}; the figure data are in
-\cmd{doc/data/bondflux\_validation.h5}.
+\cmd{doc/data/bondflux\_validation.h5}. Times are in Lennard-Jones units
+$\tau = \sigma\sqrt{m/\epsilon}$. The bond autocorrelation $C(t)$ is the fraction of bonds present
+at time 0 that are present at time $t$; $\tau_x$ is its decay time.
 
 \subsection{Exact detailed balance of the MC moves}
 
@@ -312,9 +314,9 @@ block z-score is below 3.1, the total variation distance below 0.006, and the LA
 energy changes by the sum of the $\Delta E$ of the accepted moves to $10^{-10}$.
 Figure~\ref{fig:balance} shows the run with formation and breaking on 4 ranks.
 
-\begin{figure}[h]
+\begin{figure}[htb]
 \centering
-\includegraphics[width=0.85\textwidth]{figures/mc_balance.pdf}
+\includegraphics[width=0.9\textwidth]{figures/mc_balance.pdf}
 \caption{Probabilities of the 19 reachable topologies of a frozen six-sticker cluster (0, 1 or 2
 dynamic bonds) with exchange, formation and breaking ($p_f=p_b=0.5$, $E_\text{bond}=-20\epsilon$,
 $kT=4\epsilon$, Kremer--Grest FENE, $4\times10^5$ MC steps on 4 MPI ranks) compared with the exact
@@ -330,7 +332,7 @@ With the barrier added to $\Delta E$, a move and its reverse are both penalized,
 $|\Delta E| < E_a$ their acceptance ratio becomes $e^{-2\Delta E/kT}$. The equilibrium of the
 topology is then that of half the temperature (Table~\ref{tab:rules}).
 
-\begin{table}[h]
+\begin{table}[htb]
 \centering
 \caption{Total variation distance between the stationary distribution and the Boltzmann
 distribution (exact, no sampling). Gate: $P_\text{acc}=e^{-E_a/kT}\min(1,e^{-\Delta E/kT})$;
@@ -351,6 +353,28 @@ inside exponent & $[0.87,1.14)$ & $3\times10^{-17}$ & 0.149 & 0.149 & 0.149 & 0.
 bond stretched beyond the window can be exchanged away but never formed. This bias acts through
 bond-length fluctuations and does not appear for a frozen cluster.
 
+\subsection{Kremer--Grest sticker network}
+
+A melt of 200 Kremer--Grest chains of 20 beads with stickers at beads 2, 6, 10, 14 and 18
+(\cmd{examples/kg\_network}) is first turned into a dissociative network: stickers form and break
+bonds with $E_\text{bond} = -24\epsilon$ at $kT = 1$, and the number of bonds settles at about 400 of
+500 possible (Fig.~\ref{fig:kg}a). With formation and breaking switched off, the number of bonds
+is conserved (409 bonds before and after $2\times10^5$ steps for every barrier) and the shift and
+swap moves relax the topology. The barrier enters as the gate $e^{-E_a/kT}$: going from $E_a = 0$ to
+$2\epsilon$ and $4\epsilon$ reduces the number of attempts by factors of 7.40 and 7.33 per step of
+$2kT$ and the number of accepted exchanges by 7.45 and 7.2, close to $e^2 = 7.39$. The bond
+autocorrelation time grows from $\tau_x = 128\tau$ to $739\tau$ and about $4300\tau$ (the last value
+extrapolated beyond the run), a factor of 5--6 per $2kT$, because exchanges that swap a bond back
+restore the original pairing (Fig.~\ref{fig:kg}b).
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=0.9\textwidth]{figures/kg_network.pdf}
+\caption{Kremer--Grest sticker network. (a) Number of dynamic bonds during reversible formation
+and breaking. (b) Bond autocorrelation $C(t)$ in the same network with exchange only, for three
+barriers.}\label{fig:kg}
+\end{figure}
+
 \subsection{Three-body forces and virial}
 
 \cmd{tests/test\_3body.py} compares the forces with central finite differences of the total
@@ -366,17 +390,17 @@ while the two-body energy varies between $-2\epsilon$ and $-\epsilon$ ($n=100$, 
 The dumbbell system of Ref.~\cite{Sciortino2017} has 400 A and 600 B particles at $\rho = 0.125$,
 with $n=100$, $r_c = 1.3$ and $kT = 0.03$ (\texttt{examples/\allowbreak dumbbells/\allowbreak in.dumbbells}: 1000$\tau$
 equilibration, 2000$\tau$ production, Langevin damping time 100). All 400 A particles are bonded at
-all times, and for $\lambda=1$ the bond autocorrelation decays exponentially with $\tau = 116.7$,
-against $\tau = 116$ in Ref.~\cite{Sciortino2017} (Fig.~\ref{fig:dumbbells}). For $\lambda = 1.1$
-the lifetime grows 3.5 times to $\tau = 404$, and for $\lambda = 1.3$ the bonds practically do not
+all times, and for $\lambda=1$ the bond autocorrelation decays exponentially with $\tau_x = 116.7\tau$,
+against $116\tau$ in Ref.~\cite{Sciortino2017} (Fig.~\ref{fig:dumbbells}a). For $\lambda = 1.1$
+the lifetime grows 3.5 times to $\tau_x = 404\tau$, and for $\lambda = 1.3$ the bonds practically do not
 exchange within 1000$\tau$.
 
-\begin{figure}[h]
+\begin{figure}[htb]
 \centering
-\includegraphics[width=0.48\textwidth]{figures/dumbbells.pdf}\hfill
-\includegraphics[width=0.48\textwidth]{figures/swap_event.pdf}
-\caption{Left: bond autocorrelation of the dumbbell system for $\lambda = 1$, 1.1 and 1.3, with the
-reference decay $e^{-t/116}$ of Ref.~\cite{Sciortino2017}. Right: energies during a burst of bond
+\includegraphics[width=0.9\textwidth]{figures/dumbbells.pdf}
+\caption{Three-body swap potential. (a) Bond autocorrelation $C(t)$ of the dumbbell system for
+$\lambda = 1$, 1.1 and 1.3, with the reference decay $e^{-t/116}$ of Ref.~\cite{Sciortino2017}.
+(b) Energies during a burst of bond
 swaps of one A and two B particles ($n=150$, $\lambda=1$, NVE, $kT\approx0.01$); the two-body and
 three-body energies compensate and the total potential energy stays at $-\epsilon$.}
 \label{fig:dumbbells}
@@ -387,30 +411,10 @@ three-body energies compensate and the total potential energy stays at $-\epsilo
 One A and two B particles move in NVE in a box of side 2.6 ($n = 150$, $\lambda = 1$,
 \texttt{examples/\allowbreak dumbbells/\allowbreak in.swap\_event}). During a swap, the two-body energy drops to $-2\epsilon$
 while the three-body energy rises to $+\epsilon$, so the potential energy stays at $-\epsilon$
-(Fig.~\ref{fig:dumbbells}, right). The total energy is conserved to $10^{-5}$ over $1.5\times10^5$
+(Fig.~\ref{fig:dumbbells}b). The total energy is conserved to $10^{-5}$ over $1.5\times10^5$
 steps.
 
-\subsection{Kremer--Grest sticker network}
-
-A melt of 200 Kremer--Grest chains of 20 beads with stickers at beads 2, 6, 10, 14 and 18
-(\cmd{examples/kg\_network}) is first turned into a dissociative network: stickers form and break
-bonds with $E_\text{bond} = -24\epsilon$ at $kT = 1$, and the number of bonds settles at about 400 of
-500 possible (Fig.~\ref{fig:kg}, left). With formation and breaking switched off, the number of bonds
-is conserved (409 bonds before and after $2\times10^5$ steps for every barrier) and the shift and
-swap moves relax the topology. The barrier enters as the gate $e^{-E_a/kT}$: going from $E_a = 0$ to
-$2\epsilon$ and $4\epsilon$ reduces the number of attempts by factors of 7.40 and 7.33 per step of
-$2kT$ and the number of accepted exchanges by 7.45 and 7.2, close to $e^2 = 7.39$. The bond
-autocorrelation time grows from $\tau_x = 128\tau$ to $739\tau$ and about $4300\tau$ (the last value
-extrapolated beyond the run), a factor of 5--6 per $2kT$, because exchanges that swap a bond back
-restore the original pairing (Fig.~\ref{fig:kg}, right).
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.9\textwidth]{figures/kg_network.pdf}
-\caption{Left: number of dynamic bonds during reversible formation and breaking. Right: bond
-autocorrelation in the same network with exchange only, for three barriers.}\label{fig:kg}
-\end{figure}
-
+{\small
 \begin{thebibliography}{99}
 \bibitem{Montarnal2011} D. Montarnal, M. Capelot, F. Tournilhac, L. Leibler, Science \textbf{334}, 965 (2011).
 \bibitem{Ducrot2014} E. Ducrot, Y. Chen, M. Bulters, R. P. Sijbesma, C. Creton, Science \textbf{344}, 186 (2014).
@@ -419,9 +423,10 @@ autocorrelation in the same network with exchange only, for three barriers.}\lab
 \bibitem{Xia2023} J. Xia, J. A. Kalow, M. Olvera de la Cruz, Macromolecules \textbf{56}, 8080 (2023).
 \bibitem{Xia2024b} J. Xia, M. Olvera de la Cruz, Macromolecules \textbf{57}, 8793 (2024).
 \bibitem{Sciortino2017} F. Sciortino, Eur. Phys. J. E \textbf{40}, 3 (2017).
-\bibitem{Lin2026} M.-H. Lin, T.-W. Lin, C. E. Sing, J. Chem. Phys. \textbf{164}, 144908 (2026).
 \bibitem{Zhao2022} H. Zhao, X. Wei, Y. Fang, K. Gao, T. Yue, L. Zhang, V. Ganesan, F. Meng, J. Liu,
   Macromolecules \textbf{55}, 1091 (2022).
+\bibitem{Lin2026} M.-H. Lin, T.-W. Lin, C. E. Sing, J. Chem. Phys. \textbf{164}, 144908 (2026).
 \end{thebibliography}
+}
 
 \end{document}

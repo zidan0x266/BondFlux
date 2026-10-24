@@ -21,9 +21,9 @@ changes the exchange rate without changing the equilibrium. See the
 
 ```
 src/        fix_bond_flux.cpp, fix_bond_flux.h   the LAMMPS fix
-examples/   dumbbells/    Sciortino dumbbell benchmark and swap-event energies (3body)
-            kg_network/   Kremer-Grest sticker melt -> dynamic network -> exchange (mc)
-tests/      detailed-balance, force/virial and acceptance-rule tests
+examples/   kg_network/   Kremer-Grest sticker melt -> dynamic network -> exchange (mc)
+            dumbbells/    Sciortino dumbbell benchmark and swap-event energies (3body)
+tests/      detailed-balance and acceptance-rule tests (mc), force/virial tests (3body)
 doc/        manual (PDF and LaTeX source), figure script, validation data (HDF5)
 ```
 
@@ -135,15 +135,15 @@ modes give a per-atom array: partner ID, and number of moves (mc) or partners (3
 ## Examples
 
 ```bash
-cd examples/dumbbells
-lmp -in in.dumbbells -var lambda 1.0             # bond lifetime tau ~ 116 (Sciortino 2017)
-python3 analyze_nb.py partners_lambda1.0.dump
-lmp -in in.swap_event                             # energies during bond swaps
-
-cd ../kg_network
+cd examples/kg_network
 python3 build_melt.py --chains 200 --out melt.data
 lmp -in in.associate                              # reversible association -> network.data
 lmp -in in.exchange -var Ea 2.0                   # exchange only, barrier 2 kT
+
+cd ../dumbbells
+lmp -in in.dumbbells -var lambda 1.0              # bond lifetime tau ~ 116 (Sciortino 2017)
+python3 analyze_nb.py partners_lambda1.0.dump
+lmp -in in.swap_event                             # energies during bond swaps
 ```
 
 ## Tests
@@ -154,9 +154,9 @@ numpy and h5py.
 ```bash
 python3 tests/test_mc_balance.py --variant kg            # exact detailed balance; variants kg, quartic, fene0, harm05
 mpirun -np 4 python3 tests/test_mc_balance.py --variant kg --form 0.5 --break 0.5 --ebond -20 --corner
+python3 tests/compare_acceptance_rules.py                 # barrier as gate vs. inside the Metropolis exponent
 python3 tests/test_3body.py                               # forces and virial vs. finite differences
 python3 tests/test_3body.py --flat                        # barrier-free swap for lambda = 1
-python3 tests/compare_acceptance_rules.py                 # barrier as gate vs. inside the Metropolis exponent
 ```
 
 ## Validation summary
@@ -169,14 +169,23 @@ python3 tests/compare_acceptance_rules.py                 # barrier as gate vs. 
 - **Barrier**: with the gate the stationary distribution stays exact (deviation <= 2e-11).
   Adding the barrier to the Metropolis energy change instead biases it by 0.24-0.28 (total
   variation distance) for barriers >= kT.
+- **Kremer-Grest network**: the bond count is conserved during exchange. The number of
+  accepted exchanges drops by exp(2) for each 2 kT of barrier.
 - **3body**: forces and virial agree with finite differences to 1e-9. For lambda = 1 the
   potential energy stays at -eps while a bond swaps.
 - **Sciortino dumbbells**: the bond lifetime is 116.7 (reference: 116). lambda = 1.1 raises it
   to 404, and with lambda = 1.3 bonds practically do not exchange.
-- **Kremer-Grest network**: the bond count is conserved during exchange. The number of
-  accepted exchanges drops by exp(2) for each 2 kT of barrier.
 
 ## References
+
+Hybrid MD/MC bond exchange:
+
+- A. Perego, F. Khabaz, *Volumetric and rheological properties of vitrimers: a hybrid molecular
+  dynamics and Monte Carlo simulation study*, Macromolecules **53**, 8406 (2020).
+  [doi:10.1021/acs.macromol.0c01423](https://doi.org/10.1021/acs.macromol.0c01423)
+- J. Xia, J. A. Kalow, M. Olvera de la Cruz, *Structure, dynamics, and rheology of vitrimers*,
+  Macromolecules **56**, 8080 (2023).
+  [doi:10.1021/acs.macromol.3c01366](https://doi.org/10.1021/acs.macromol.3c01366)
 
 Three-body swap potential:
 
@@ -190,12 +199,3 @@ Three-body swap potential:
 - M.-H. Lin, T.-W. Lin, C. E. Sing, *Molecular simulation study of penetrant diffusion in
   vitrimer networks*, J. Chem. Phys. **164**, 144908 (2026).
   [doi:10.1063/5.0322457](https://doi.org/10.1063/5.0322457)
-
-Hybrid MD/MC bond exchange:
-
-- A. Perego, F. Khabaz, *Volumetric and rheological properties of vitrimers: a hybrid molecular
-  dynamics and Monte Carlo simulation study*, Macromolecules **53**, 8406 (2020).
-  [doi:10.1021/acs.macromol.0c01423](https://doi.org/10.1021/acs.macromol.0c01423)
-- J. Xia, J. A. Kalow, M. Olvera de la Cruz, *Structure, dynamics, and rheology of vitrimers*,
-  Macromolecules **56**, 8080 (2023).
-  [doi:10.1021/acs.macromol.3c01366](https://doi.org/10.1021/acs.macromol.3c01366)
