@@ -182,6 +182,19 @@ python3 tests/test_hoomd_revcross.py                      # cross-check with HOO
 
 - F. Sciortino, Three-body potential for simulating bond swaps in molecular dynamics,
   Eur. Phys. J. E 40, 3 (2017).
+
+Applications of the three-body potential to vitrimers:
+
+- H. Zhao, X. Wei, Y. Fang, K. Gao, T. Yue, L. Zhang, V. Ganesan, F. Meng, J. Liu, Molecular
+  dynamics simulation of the structural, mechanical, and reprocessing properties of vitrimers
+  based on a dynamic covalent polymer network, Macromolecules 55, 1091 (2022),
+  [doi:10.1021/acs.macromol.1c02034](https://doi.org/10.1021/acs.macromol.1c02034).
+- M.-H. Lin, T.-W. Lin, C. E. Sing, Molecular simulation study of penetrant diffusion in
+  vitrimer networks, J. Chem. Phys. 164, 144908 (2026),
+  [doi:10.1063/5.0322457](https://doi.org/10.1063/5.0322457).
+
+Bead-spring model and hybrid MD/MC methods:
+
 - K. Kremer, G. S. Grest, J. Chem. Phys. 92, 5057 (1990).
 - A. Perego, F. Khabaz, Macromolecules 53, 8406 (2020).
 - J. Xia, J. A. Kalow, M. Olvera de la Cruz, Macromolecules 56, 8080 (2023).

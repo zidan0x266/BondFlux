@@ -43,8 +43,8 @@ model~\cite{Kremer1990}. Exchange, formation and breaking can be combined with e
 the irreversible scission of bonds through \cmd{bond\_style quartic}.
 
 Two routes are used in the literature. In the first, a dynamic bond is an explicit LAMMPS bond, and
-an MC step between MD steps changes the topology (Perego and Khabaz~\cite{Perego2020,Perego2022},
-Xia and Olvera de la Cruz~\cite{Xia2023,Xia2024a,Xia2024b}, and others). In the second, a bond is a
+an MC step between MD steps changes the topology (Perego and Khabaz~\cite{Perego2020},
+Xia and Olvera de la Cruz~\cite{Xia2023}, and others). In the second, a bond is a
 short-ranged pair attraction. A three-body repulsion enforces one bond per sticker and makes the
 bond swap barrier-free, so standard MD produces the exchange~\cite{Sciortino2017}. BondFlux provides
 both routes in the same fix (Table~\ref{tab:modes}).
@@ -126,7 +126,7 @@ A reaction barrier $E_a$ (\cmd{barrier}) and an attempt probability $P$ (\cmd{pr
 gate: a sticker is offered a move only with probability $g = P\,e^{-E_a/kT}$. The gate multiplies the
 rate of every move and of its reverse by the same factor, so it changes the kinetics and leaves the
 equilibrium unchanged (Sec.~\ref{sec:rules}). Adding $E_a$ to $\Delta E$ inside the Metropolis
-exponent, as in Refs.~\cite{Xia2024a,Xia2024b}, does not have this property.
+exponent, as in Ref.~\cite{Xia2024b}, does not have this property.
 
 \paragraph{Parallel moves.}
 A move centered on sticker $i$ involves atoms within $2r_c$ of $i$. Each MPI sub-domain is split
@@ -159,6 +159,11 @@ $(\lambda - 1)\epsilon$. Forces, energy and virial are computed in the \cmd{pre\
 full neighbor list, and forces on ghost atoms are summed by LAMMPS's reverse communication. The fix
 supplies the complete interaction between bondable sticker types; the pair style interaction
 between them must be switched off (\cmd{pair\_coeff A B 0.0 ...}).
+
+The three-body potential is widely used for coarse-grained vitrimers, for example by Liu,
+Ganesan and co-workers to relate the bond swap barrier to the structure, mechanics, self-healing
+and reprocessing of vitrimer networks~\cite{Zhao2022}, and by Sing and co-workers to study
+penetrant diffusion in vitrimer networks~\cite{Lin2026}.
 
 %======================================================================
 \section{Using fix bond/flux in LAMMPS}
@@ -245,7 +250,7 @@ bond_coeff      2 1200.0 -0.55 0.25 1.3 34.6878
 fix             flux stick bond/flux mc 10 2 1.2 1.0 4321 barrier 3.0
 \end{lstlisting}
 
-\paragraph{Cross-linker vitrimer as in Refs.~\cite{Xia2023,Xia2024a}} (A stickers on chains, B ends of
+\paragraph{Cross-linker vitrimer as in Refs.~\cite{Xia2023,Xia2024b}} (A stickers on chains, B ends of
 three-bead cross-linkers, LJ with $r_c = 1.5\sigma$, MC every 10 steps, reaction window
 $0.87\le r < 1.14$; only free A stickers attack bonded B):
 \begin{lstlisting}
@@ -254,9 +259,10 @@ bond_coeff      2 30.0 1.5 0.0 1.0      # FENE without the WCA term
 fix             flux AB bond/flux mc 10 2 1.14 1.0 9876 bondable 1 2 swap no rmin 0.87 barrier ${Ub}
 \end{lstlisting}
 
-\paragraph{Pair-swap vitrimer as in Refs.~\cite{Perego2020,Perego2022}} (all stickers bonded, swaps only):
+\paragraph{Pair-swap vitrimer as in Ref.~\cite{Perego2020}} (all stickers bonded, swaps only, an MC step
+every MD step):
 \begin{lstlisting}
-fix             flux stick bond/flux mc 100 2 1.3 1.0 5555 shift no
+fix             flux stick bond/flux mc 1 2 1.3 1.0 5555 shift no
 \end{lstlisting}
 
 \paragraph{Sciortino dumbbells} (\cmd{examples/dumbbells}; A--A and B--B repulsive $2n$--$n$ WCA):
@@ -447,7 +453,7 @@ These were found while comparing BondFlux with the codes and papers it builds on
   sites with three or more bonded pairs are skipped; the lowest-energy candidate is chosen
   deterministically; \cmd{alpha} scales $\Delta E$; and \cmd{P\_coeff}$>1$ breaks detailed balance.
 \item TICG binary vitrimer code: the swap move checks the reaction radius for the new partner only.
-\item Refs.~\cite{Xia2024a,Xia2024b}: barrier inside the Metropolis exponent (Sec.~\ref{sec:rules});
+\item Ref.~\cite{Xia2024b}: barrier inside the Metropolis exponent (Sec.~\ref{sec:rules});
   Ref.~\cite{Xia2023}: window checked for the new bond only.
 \end{itemize}
 
@@ -456,14 +462,14 @@ These were found while comparing BondFlux with the codes and papers it builds on
 \bibitem{Ducrot2014} E. Ducrot, Y. Chen, M. Bulters, R. P. Sijbesma, C. Creton, Science \textbf{344}, 186 (2014).
 \bibitem{Kremer1990} K. Kremer, G. S. Grest, J. Chem. Phys. \textbf{92}, 5057 (1990).
 \bibitem{Perego2020} A. Perego, F. Khabaz, Macromolecules \textbf{53}, 8406 (2020).
-\bibitem{Perego2022} A. Perego, D. Lazarenko, M. Cloitre, F. Khabaz, Macromolecules \textbf{55}, 7605 (2022).
 \bibitem{Xia2023} J. Xia, J. A. Kalow, M. Olvera de la Cruz, Macromolecules \textbf{56}, 8080 (2023).
-\bibitem{Xia2024a} J. Xia, M. Olvera de la Cruz, Polymer \textbf{308}, 127371 (2024).
 \bibitem{Xia2024b} J. Xia, M. Olvera de la Cruz, Macromolecules \textbf{57}, 8793 (2024).
 \bibitem{Sciortino2017} F. Sciortino, Eur. Phys. J. E \textbf{40}, 3 (2017).
 \bibitem{Ciarella2019} S. Ciarella, W. G. Ellenbroek, arXiv:1912.08569 (2019).
 \bibitem{Anderson2020} J. A. Anderson, J. Glaser, S. C. Glotzer, Comput. Mater. Sci. \textbf{173}, 109363 (2020).
 \bibitem{Lin2026} M.-H. Lin, T.-W. Lin, C. E. Sing, J. Chem. Phys. \textbf{164}, 144908 (2026).
+\bibitem{Zhao2022} H. Zhao, X. Wei, Y. Fang, K. Gao, T. Yue, L. Zhang, V. Ganesan, F. Meng, J. Liu,
+  Macromolecules \textbf{55}, 1091 (2022).
 \end{thebibliography}
 
 \end{document}
