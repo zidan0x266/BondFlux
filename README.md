@@ -180,21 +180,24 @@ python3 tests/test_hoomd_revcross.py                      # cross-check with HOO
 
 ## References
 
-- F. Sciortino, Three-body potential for simulating bond swaps in molecular dynamics,
-  Eur. Phys. J. E 40, 3 (2017).
+Three-body swap potential:
 
-Applications of the three-body potential to vitrimers:
-
-- H. Zhao, X. Wei, Y. Fang, K. Gao, T. Yue, L. Zhang, V. Ganesan, F. Meng, J. Liu, Molecular
+- F. Sciortino, *Three-body potential for simulating bond swaps in molecular dynamics*,
+  Eur. Phys. J. E **40**, 3 (2017).
+  [doi:10.1140/epje/i2017-11496-5](https://doi.org/10.1140/epje/i2017-11496-5)
+- H. Zhao, X. Wei, Y. Fang, K. Gao, T. Yue, L. Zhang, V. Ganesan, F. Meng, J. Liu, *Molecular
   dynamics simulation of the structural, mechanical, and reprocessing properties of vitrimers
-  based on a dynamic covalent polymer network, Macromolecules 55, 1091 (2022),
-  [doi:10.1021/acs.macromol.1c02034](https://doi.org/10.1021/acs.macromol.1c02034).
-- M.-H. Lin, T.-W. Lin, C. E. Sing, Molecular simulation study of penetrant diffusion in
-  vitrimer networks, J. Chem. Phys. 164, 144908 (2026),
-  [doi:10.1063/5.0322457](https://doi.org/10.1063/5.0322457).
+  based on a dynamic covalent polymer network*, Macromolecules **55**, 1091 (2022).
+  [doi:10.1021/acs.macromol.1c02034](https://doi.org/10.1021/acs.macromol.1c02034)
+- M.-H. Lin, T.-W. Lin, C. E. Sing, *Molecular simulation study of penetrant diffusion in
+  vitrimer networks*, J. Chem. Phys. **164**, 144908 (2026).
+  [doi:10.1063/5.0322457](https://doi.org/10.1063/5.0322457)
 
-Bead-spring model and hybrid MD/MC methods:
+Hybrid MD/MC bond exchange:
 
-- K. Kremer, G. S. Grest, J. Chem. Phys. 92, 5057 (1990).
-- A. Perego, F. Khabaz, Macromolecules 53, 8406 (2020).
-- J. Xia, J. A. Kalow, M. Olvera de la Cruz, Macromolecules 56, 8080 (2023).
+- A. Perego, F. Khabaz, *Volumetric and rheological properties of vitrimers: a hybrid molecular
+  dynamics and Monte Carlo simulation study*, Macromolecules **53**, 8406 (2020).
+  [doi:10.1021/acs.macromol.0c01423](https://doi.org/10.1021/acs.macromol.0c01423)
+- J. Xia, J. A. Kalow, M. Olvera de la Cruz, *Structure, dynamics, and rheology of vitrimers*,
+  Macromolecules **56**, 8080 (2023).
+  [doi:10.1021/acs.macromol.3c01366](https://doi.org/10.1021/acs.macromol.3c01366)
