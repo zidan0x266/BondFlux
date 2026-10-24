@@ -1,9 +1,12 @@
 # Energy during bond swaps with fix bond/flux 3body (Sciortino, Eur. Phys. J. E 40, 3 (2017), Fig. 1b)
 # one A particle and two B particles in a small periodic box, NVE at kT ~ 0.01:
 # the A-B bond swaps between the two B particles while the total potential energy
-# stays at -eps; two-body (f_tb[1]) and three-body (f_tb[2]) energies compensate
+# stays at -eps; two-body (f_tb[1]) and three-body (f_tb[2]) energies compensate.
+# -var shape sw uses the Stillinger-Weber shaped bond (B = 0.5, p = 150, q = 75), for which
+# the compensation holds as well; output then goes to swap_event_sw.txt
 
 variable        n equal 150
+variable        shape index lj
 variable        seed index 2468
 
 units           lj
@@ -23,7 +26,14 @@ pair_coeff      1 2 0.0 1.0 $(2*v_n) ${n}
 pair_modify     shift yes
 
 group           stick type 1 2
-fix             tb stick bond/flux 3body 1.0 1.0 ${n} 1.3 1.0 bondable 1 2
+variable        tag string ""
+if "${shape} == sw" then &
+  "fix tb stick bond/flux 3body sw 1.0 1.0 0.5 ${n} $(v_n/2) 1.3 1.0 bondable 1 2" &
+  "variable tag string _sw" &
+elif "${shape} == lj" &
+  "fix tb stick bond/flux 3body 1.0 1.0 ${n} 1.3 1.0 bondable 1 2" &
+else &
+  "print 'shape must be lj or sw'" "quit 1"
 
 comm_modify     cutoff 1.8
 neighbor        0.3 bin
@@ -37,7 +47,7 @@ thermo_style    custom step pe f_tb[1] f_tb[2] etotal
 thermo_modify   norm no
 thermo          50
 variable        pe equal pe
-fix             out all ave/time 25 1 25 f_tb[1] f_tb[2] v_pe file swap_event.txt format ' %.10g'
-dump            d all custom 25 swap_event.dump id type x y z f_tb[1] f_tb[2]
+fix             out all ave/time 25 1 25 f_tb[1] f_tb[2] v_pe file swap_event${tag}.txt format ' %.10g'
+dump            d all custom 25 swap_event${tag}.dump id type x y z f_tb[1] f_tb[2]
 dump_modify     d sort id
 run             150000

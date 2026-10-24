@@ -22,7 +22,7 @@ changes the exchange rate without changing the equilibrium. See the
 ```
 src/        fix_bond_flux.cpp, fix_bond_flux.h   the LAMMPS fix
 examples/   kg_network/   Kremer-Grest sticker melt -> dynamic network -> exchange (mc)
-            dumbbells/    Sciortino dumbbell benchmark and swap-event energies (3body)
+            dumbbells/    Sciortino dumbbell benchmark, swap-event energies, two chemistries (3body)
 tests/      detailed-balance and acceptance-rule tests (mc), force/virial tests (3body)
 manual.pdf  user manual: methods, LAMMPS commands and validation tests
 ```
@@ -166,12 +166,15 @@ modes give a per-atom array: partner ID, and number of moves (mc) or partners (3
 cd examples/kg_network
 python3 build_melt.py --chains 200 --out melt.data
 lmp -in in.associate                              # reversible association -> network.data
-lmp -in in.exchange -var Ea 2.0                   # exchange only, barrier 2 kT
+lmp -in in.exchange -var Ea 2.0                   # exchange only, barrier 2 kT; f_miss in f_flux[16]
+lmp -in in.exchange -var nevery 10                # MC every 10 steps: no contact is missed
 
 cd ../dumbbells
 lmp -in in.dumbbells -var lambda 1.0              # bond lifetime tau ~ 116 (Sciortino 2017)
 python3 analyze_nb.py partners_lambda1.0.dump
-lmp -in in.swap_event                             # energies during bond swaps
+lmp -in in.dumbbells -var shape sw                # Stillinger-Weber shaped bond
+lmp -in in.swap_event                             # energies during bond swaps (also -var shape sw)
+lmp -in in.two_chemistries -var trip 1.0          # A with B and C partners (coeff, triplet)
 ```
 
 ## Tests

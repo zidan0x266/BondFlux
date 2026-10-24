@@ -3,7 +3,7 @@
 # stickers (type 2) associate reversibly through fix bond/flux formation and
 # breaking moves; the association energy ebond (added per bond, on top of the
 # FENE bond energy) sets the equilibrium conversion.  The result is written to
-# network.data and used by in.exchange and in.dual_network.
+# network.data and used by in.exchange.
 #
 # make the melt first:  python3 build_melt.py --chains 200 --out melt.data
 

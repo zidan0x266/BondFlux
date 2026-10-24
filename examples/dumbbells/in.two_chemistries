@@ -1,0 +1,77 @@
+# Two sticker chemistries with fix bond/flux 3body: per-type-pair parameters (coeff) and
+# the three-body strength of mixed triplets (triplet)
+#
+# A dumbbell fluid as in in.dumbbells (rho = 0.125, n = 100, rc = 1.3, kT = 0.03,
+# lambda = 1), with 400 A particles and 600 partners: 300 B (A-B bond depth 1.0) and
+# 300 C (A-C bond depth epsC, set with coeff).  A triplet with one B and one C leg has the
+# strength min(1.0, epsC) by default, so an A swaps between a B and a C partner without a
+# barrier beyond the energy difference of the two bonds; -var trip X sets that strength
+# (X > epsC adds a barrier to B <-> C swaps only, B <-> B and C <-> C swaps are unchanged).
+#
+# output: numbers of A-B and A-C bonds (thermo c_nAB, c_nAC) and partner IDs of A (dump)
+# variables (set with -var): epsC, trip, seed, teq / tprod (equilibration / production time)
+
+variable        epsC index 0.95
+variable        trip index ${epsC}
+variable        seed index 5310
+variable        teq index 1000.0
+variable        tprod index 2000.0
+variable        n equal 100
+variable        kT equal 0.03
+variable        dt equal 0.001
+
+units           lj
+atom_style      bond
+boundary        p p p
+
+region          box block 0 20 0 20 0 20
+create_box      3 box bond/types 1
+create_atoms    1 random 400 ${seed} box overlap 1.32 maxtry 100
+create_atoms    2 random 300 $(v_seed+1) box overlap 1.32 maxtry 100
+create_atoms    3 random 300 $(v_seed+2) box overlap 1.32 maxtry 100
+mass            * 1.0
+
+# all pairs repulsive (generalized WCA), except A-B and A-C, which the fix supplies
+
+pair_style      mie/cut $(2.0^(1.0/v_n))
+pair_coeff      * * 1.0 1.0 $(2*v_n) ${n}
+pair_coeff      1 2 0.0 1.0 $(2*v_n) ${n}
+pair_coeff      1 3 0.0 1.0 $(2*v_n) ${n}
+pair_modify     shift yes
+
+group           A type 1
+group           B type 2
+group           C type 3
+group           stick type 1 2 3
+fix             tb stick bond/flux 3body 1.0 1.0 ${n} 1.3 1.0 bondable 1 2 bondable 1 3 &
+                coeff 1 3 ${epsC} 1.0 ${n} 1.3 1.0 triplet 1 2 3 ${trip}
+
+# bonds of each chemistry: partners (within the cutoff) of the B and of the C particles
+
+compute         nAB B reduce sum f_tb[2]
+compute         nAC C reduce sum f_tb[2]
+
+comm_modify     cutoff 2.0
+neighbor        0.3 bin
+neigh_modify    every 1 delay 0 check yes
+
+velocity        all create ${kT} $(v_seed+3) mom yes rot yes dist gaussian
+timestep        ${dt}
+
+# equilibration: dumbbells form, strong thermostat
+
+fix             nve all nve
+fix             lang all langevin ${kT} ${kT} 1.0 $(v_seed+4)
+thermo_style    custom step temp pe f_tb f_tb[1] f_tb[2] c_nAB c_nAC f_tb[4]
+thermo_modify   norm no
+thermo          20000
+run             $(round(v_teq/v_dt))
+
+# production: weak thermostat (damping time 100)
+
+unfix           lang
+fix             lang all langevin ${kT} ${kT} 100.0 $(v_seed+5)
+reset_timestep  0
+dump            d A custom 1000 partners_two_epsC${epsC}_trip${trip}.dump id f_tb[1] f_tb[2]
+dump_modify     d sort id
+run             $(round(v_tprod/v_dt))

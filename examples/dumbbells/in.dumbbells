@@ -5,10 +5,13 @@
 # A-A and B-B: generalized WCA 4 eps [(s/r)^2n - (s/r)^n] + eps, cut at 2^(1/n) s
 # A-B: two-body + three-body swap potential from fix bond/flux (pair style switched off)
 #
-# variables (set with -var): lambda (default 1.0), seed, teq / tprod (equilibration /
-# production time)
+# variables (set with -var): lambda (default 1.0), shape (lj = 2n-n bond of the benchmark,
+# sw = Stillinger-Weber shaped bond with B = 0.5, p = 100, q = 50, which goes to zero
+# smoothly at rc; its lifetime differs from the benchmark), seed, teq / tprod
+# (equilibration / production time)
 
 variable        lambda index 1.0
+variable        shape index lj
 variable        seed index 4265101
 variable        teq index 1000.0
 variable        tprod index 2000.0
@@ -33,7 +36,14 @@ pair_coeff      1 2 0.0 1.0 $(2*v_n) ${n}
 pair_modify     shift yes
 
 group           stick type 1 2
-fix             tb stick bond/flux 3body 1.0 1.0 ${n} 1.3 ${lambda} bondable 1 2
+variable        tag string lambda
+if "${shape} == sw" then &
+  "fix tb stick bond/flux 3body sw 1.0 1.0 0.5 100 50 1.3 ${lambda} bondable 1 2" &
+  "variable tag string sw_lambda" &
+elif "${shape} == lj" &
+  "fix tb stick bond/flux 3body 1.0 1.0 ${n} 1.3 ${lambda} bondable 1 2" &
+else &
+  "print 'shape must be lj or sw'" "quit 1"
 
 comm_modify     cutoff 2.0
 neighbor        0.3 bin
@@ -57,6 +67,6 @@ unfix           lang
 fix             lang all langevin ${kT} ${kT} 100.0 $(v_seed+4)
 reset_timestep  0
 group           A type 1
-dump            d A custom 1000 partners_lambda${lambda}.dump id f_tb[1] f_tb[2]
+dump            d A custom 1000 partners_${tag}${lambda}.dump id f_tb[1] f_tb[2]
 dump_modify     d sort id
 run             $(round(v_tprod/v_dt))
