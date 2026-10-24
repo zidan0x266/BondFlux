@@ -77,6 +77,7 @@ class FixBondFlux : public Fix {
   double pform, pbreak;            // probabilities to attempt formation / breaking
   double ebond;                    // association energy added per dynamic bond
   int molflag;                     // ANY, INTER, INTRA
+  int impulse;                     // 1 = correct the velocities of atoms whose bonds changed
   int pairflag;                    // 1 if special 1-2 weights are not 1.0
   double wlj, wcoul;               // special 1-2 weights
   class RanMars *random;
@@ -154,6 +155,8 @@ class FixBondFlux : public Fix {
   double bond_energy(int, int, double);
   double pair_delta(int, int, double);
   double count_bonds();
+  double topology_force(int, int, double);
+  void correct_velocities();
   void contact_check(int);
   int has_candidate(int);
 

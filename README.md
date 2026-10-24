@@ -104,6 +104,14 @@ dynamic bond type and `T` the Metropolis temperature (use the thermostat set poi
 | `rmin` | lower end of the reaction window | 0 |
 | `molecule` | `any`, `inter`, `intra` | `any` |
 | `contact` | `Ncheck`: contact diagnostics every `Ncheck` steps (must divide `Nevery`) | off |
+| `impulse` | `yes`/`no`: velocity correction at the topology switch (see below) | `yes` |
+
+The MC step falls between the two half-kicks of velocity Verlet. Without a correction
+(`impulse no`, as in earlier hybrid MD/MC work) the second half-kick already uses the forces
+of the new bonds, which heats the system at every accepted move by about |dF|^2 dt^2 / 8m. With
+`impulse yes` the atoms whose bonds changed get the velocity change (F_old - F_new) dt / 2m, so
+that the step ends as without the moves and an accepted move changes only the potential energy,
+by its Delta E. In NVE, E_total minus the sum of Delta E (`f_ID[9]`) then stays constant.
 
 A sticker is in contact while it has a candidate for its move. `contact` measures the time in
 contact, the contact episodes, and the episodes that end before any MC step sees them. Their
@@ -191,6 +199,7 @@ python3 tests/test_3body.py --flat                        # barrier-free swap fo
 python3 tests/test_3body.py --coeff                       # per-type-pair parameters (coeff and triplet keywords)
 python3 tests/test_3body.py --form sw                     # Stillinger-Weber shaped bond (also with --coeff)
 python3 tests/test_contact.py                             # contact diagnostics vs. an exact recount
+python3 tests/test_nve.py                                 # energy with MC moves in NVE (impulse yes / no)
 ```
 
 ## Validation summary
@@ -205,6 +214,9 @@ python3 tests/test_contact.py                             # contact diagnostics 
   variation distance) for barriers >= kT.
 - **Kremer-Grest network**: the bond count is conserved during exchange. The number of
   accepted exchanges drops by exp(2) for each 2 kT of barrier.
+- **Energy in NVE**: with `impulse yes`, E_total minus the sum of Delta E of the accepted moves
+  has no systematic drift. Without the correction it rises by 0.16 eps per accepted move in the
+  Kremer-Grest network at dt = 0.01 (0.046 at dt = 0.005), and with it by 0.0095 (-0.0003).
 - **Contact diagnostics**: contact time, episodes and missed episodes equal an exact recount
   from the trajectory on 1, 2 and 4 MPI ranks. In the Kremer-Grest network, MC every 100 steps
   misses 42 % of the contact episodes resolved every 10 steps; MC every 10 steps misses none.

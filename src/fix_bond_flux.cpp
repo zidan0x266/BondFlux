@@ -111,6 +111,7 @@ FixBondFlux::FixBondFlux(LAMMPS *lmp, int narg, char **arg) :
   pform = pbreak = 0.0;
   ebond = 0.0;
   molflag = ANY;
+  impulse = 1;
   pairflag = 0;
   wlj = wcoul = 1.0;
   form3 = BOND_LJ;
@@ -277,6 +278,10 @@ FixBondFlux::FixBondFlux(LAMMPS *lmp, int narg, char **arg) :
         error->all(FLERR, iarg + 4, "Illegal fix {} 3body triplet strength {}", style, t.strength);
       triplets.push_back(t);
       iarg += 5;
+    } else if ((strcmp(arg[iarg], "impulse") == 0) && (mode == MC)) {
+      if (iarg + 2 > narg) utils::missing_cmd_args(FLERR, fixname + " impulse", error);
+      impulse = utils::logical(FLERR, arg[iarg + 1], false, lmp);
+      iarg += 2;
     } else if ((strcmp(arg[iarg], "contact") == 0) && (mode == MC)) {
       if (iarg + 2 > narg) utils::missing_cmd_args(FLERR, fixname + " contact", error);
       ncontact = utils::inumeric(FLERR, arg[iarg + 1], false, lmp);
@@ -805,6 +810,7 @@ void FixBondFlux::mc_step()
   nlast = (bigint) total[0];
   atom->nbonds += (bigint) total[1];
 
+  if (impulse) correct_velocities();
   reconcile_topology();
 }
 
@@ -1312,6 +1318,67 @@ double FixBondFlux::pair_delta(int i, int j, double rsq)
   double fdummy;
   return force->pair->single(i, j, itype, jtype, rsq, 1.0, 1.0, fdummy) -
       force->pair->single(i, j, itype, jtype, rsq, wcoul, wlj, fdummy);
+}
+
+/* ----------------------------------------------------------------------
+   force on I (= del_IJ * returned value) from the part of the potential that
+   depends on whether I,J is a dynamic bond: U_bond(r) - pair_delta(r)
+------------------------------------------------------------------------- */
+
+double FixBondFlux::topology_force(int i, int j, double rsq)
+{
+  double fbond, fpair;
+  force->bond->single(btype, rsq, i, j, fbond);
+  if (!pairflag) return fbond;
+  const int itype = atom->type[i];
+  const int jtype = atom->type[j];
+  if (rsq >= force->pair->cutsq[itype][jtype]) return fbond;
+  double f = fbond;
+  force->pair->single(i, j, itype, jtype, rsq, wcoul, wlj, fpair);
+  f += fpair;
+  force->pair->single(i, j, itype, jtype, rsq, 1.0, 1.0, fpair);
+  return f - fpair;
+}
+
+/* ----------------------------------------------------------------------
+   the MC step falls between the two half-kicks of velocity Verlet, so the
+   second half-kick of this step uses the forces of the new topology; adding
+   (F_old - F_new) dt/2m to every atom whose partner changed makes the step
+   end as without the moves, and the moves then change only the potential
+   energy, by the Delta E of the Metropolis test (no heating by the switch)
+------------------------------------------------------------------------- */
+
+void FixBondFlux::correct_velocities()
+{
+  double **x = atom->x;
+  double **v = atom->v;
+  int *type = atom->type;
+  double *rmass = atom->rmass;
+  double *mass = atom->mass;
+  const int nlocal = atom->nlocal;
+  const double dtf = 0.5 * update->dt * force->ftm2v;
+
+  for (int i = 0; i < nlocal; i++) {
+    const tagint pold = porig[i];
+    const tagint pnew = (tagint) store[i][0];
+    if (pold == pnew) continue;
+
+    double df[3] = {0.0, 0.0, 0.0};
+    const tagint partner[2] = {pold, pnew};
+    const double sign[2] = {1.0, -1.0};
+    for (int m = 0; m < 2; m++) {
+      if (partner[m] == 0) continue;
+      int j = atom->map(partner[m]);
+      if (j < 0) continue;
+      j = domain->closest_image(i, j);
+      const double del[3] = {x[i][0] - x[j][0], x[i][1] - x[j][1], x[i][2] - x[j][2]};
+      const double rsq = del[0] * del[0] + del[1] * del[1] + del[2] * del[2];
+      const double f = sign[m] * topology_force(i, j, rsq);
+      for (int d = 0; d < 3; d++) df[d] += f * del[d];
+    }
+    const double dtfm = dtf / (atom->rmass_flag ? rmass[i] : mass[type[i]]);
+    for (int d = 0; d < 3; d++) v[i][d] += dtfm * df[d];
+  }
 }
 
 /* ----------------------------------------------------------------------
