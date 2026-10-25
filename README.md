@@ -1,27 +1,49 @@
 # BondFlux
 
-A simulation toolkit for dynamic bonds in polymer networks. BondFlux adds bond formation,
-breaking, and exchange to LAMMPS molecular dynamics. It is not limited to vitrimers: it also
-handles dissociative networks, supramolecular stickers, and multiple-network elastomers whose
-strands break under load.
+Dynamic bonds for LAMMPS: bond exchange, bond swaps, and reversible bond formation and
+breaking in polymer networks.
+
+BondFlux is a simulation toolkit for dynamic bonds in polymer networks. It adds bond
+formation, breaking, and exchange to LAMMPS molecular dynamics of coarse-grained
+(bead-spring, Kremer-Grest) polymers. It covers both classes of dynamic covalent bonds as
+well as reversible physical bonds:
+
+- **Associative exchange**: vitrimers and other associative covalent adaptable networks
+  (CANs). A bond swaps to a new partner, so the number of crosslinks stays constant, as in
+  transesterification, transamination of vinylogous urethanes, dioxaborolane metathesis or
+  imine exchange.
+- **Dissociative exchange**: dissociative CANs such as Diels-Alder networks. Bonds break and
+  form again later, and the crosslink density depends on temperature.
+- **Supramolecular and associating polymers**: reversible stickers (hydrogen bonds,
+  metal-ligand complexes) that form transient networks and physical gels.
+- **Double- and multiple-network elastomers**: sacrificial strands that break under load,
+  combined with dynamic bonds that exchange.
+
+Typical applications are stress relaxation and rheology, creep and flow, self-healing,
+deformation and fracture, and diffusion in networks whose topology changes.
 
 BondFlux is a single LAMMPS fix style, `fix bond/flux`, with two modes:
 
 | mode | how bonds change | dynamic bonds are |
 |---|---|---|
-| `mc` | Monte Carlo moves between MD steps: exchange (shift, swap) and, optionally, reversible formation and breaking | LAMMPS bonds of one bond type (FENE, quartic, harmonic, ...) |
+| `mc` | hybrid MD/MC: Monte Carlo moves between MD steps, bond exchange (shift, swap) and, optionally, reversible formation and breaking | LAMMPS bonds of one bond type (FENE, quartic, harmonic, ...) |
 | `3body` | MD with the Sciortino three-body swap potential | pair interactions between sticker atoms |
+
+Associative exchange uses the `mc` shift and swap moves; dissociative networks and stickers
+add formation and breaking, with the association energy `ebond`. In `3body` mode, lambda = 1
+gives barrier-free bond swaps, while lambda > 1 suppresses them, so that bonds change mainly
+by dissociation.
 
 The Monte Carlo moves satisfy detailed balance with respect to the full force field (bond
 style, pair style and `special_bonds` weights), in serial and in parallel. A reaction barrier
-changes the exchange rate without changing the equilibrium. See the
+(activation energy) changes the exchange rate without changing the equilibrium. See the
 [manual](manual.pdf) for the methods and the validation.
 
 ## Repository layout
 
 ```
 src/        fix_bond_flux.cpp, fix_bond_flux.h   the LAMMPS fix
-examples/   kg_network/   Kremer-Grest sticker melt -> dynamic network -> exchange (mc)
+examples/   kg_network/   Kremer-Grest sticker melt -> dynamic network -> bond exchange (mc)
             dumbbells/    Sciortino dumbbell benchmark, swap-event energies, two chemistries (3body)
 tests/      detailed-balance and acceptance-rule tests (mc), force/virial tests (3body)
 manual.pdf  user manual: methods, LAMMPS commands and validation tests
@@ -49,8 +71,8 @@ LAMMPS stable 30 Sep 2026.
 
 ## Quick start
 
-Kremer-Grest vitrimer: stickers of type 2 exchange their bonds of type 2, and the number of
-bonds is conserved:
+Associative network (Kremer-Grest vitrimer): stickers of type 2 exchange their bonds of type
+2, and the number of bonds is conserved:
 
 ```
 special_bonds   lj/coul 0.0 1.0 1.0
@@ -61,7 +83,8 @@ group           stick type 2
 fix             flux stick bond/flux mc 100 2 1.3 1.0 777 barrier 2.0
 ```
 
-Dissociative network: bonds also form and break; `ebond` is the association energy per bond:
+Dissociative network (reversible crosslinks): bonds also form and break; `ebond` is the
+association energy per bond:
 
 ```
 fix             flux stick bond/flux mc 100 2 1.3 1.0 12347 form 1.0 break 0.5 ebond -24.0
@@ -251,3 +274,13 @@ Three-body swap potential:
 - M.-H. Lin, T.-W. Lin, C. E. Sing, *Molecular simulation study of penetrant diffusion in
   vitrimer networks*, J. Chem. Phys. **164**, 144908 (2026).
   [doi:10.1063/5.0322457](https://doi.org/10.1063/5.0322457)
+
+## Keywords
+
+dynamic bonds, dynamic covalent bonds, reversible bonds, reversible crosslinks, bond exchange,
+bond exchange reactions, bond swap, bond swapping, associative exchange, dissociative
+exchange, vitrimers, covalent adaptable networks (CANs), dynamic covalent networks,
+supramolecular polymers, associating polymers, sticky polymers, transient networks,
+self-healing polymers, double-network elastomers, sacrificial bonds, hybrid molecular
+dynamics / Monte Carlo (MD/MC), Metropolis bond moves, three-body swap potential, Sciortino
+potential, coarse-grained polymer simulation, Kremer-Grest bead-spring model, LAMMPS fix
