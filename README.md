@@ -19,9 +19,6 @@ well as reversible physical bonds:
 - **Double- and multiple-network elastomers**: sacrificial strands that break under load,
   combined with dynamic bonds that exchange.
 
-Typical applications are stress relaxation and rheology, creep and flow, self-healing,
-deformation and fracture, and diffusion in networks whose topology changes.
-
 BondFlux is a single LAMMPS fix style, `fix bond/flux`, with two modes:
 
 | mode | how bonds change | dynamic bonds are |
@@ -274,13 +271,3 @@ Three-body swap potential:
 - M.-H. Lin, T.-W. Lin, C. E. Sing, *Molecular simulation study of penetrant diffusion in
   vitrimer networks*, J. Chem. Phys. **164**, 144908 (2026).
   [doi:10.1063/5.0322457](https://doi.org/10.1063/5.0322457)
-
-## Keywords
-
-dynamic bonds, dynamic covalent bonds, reversible bonds, reversible crosslinks, bond exchange,
-bond exchange reactions, bond swap, bond swapping, associative exchange, dissociative
-exchange, vitrimers, covalent adaptable networks (CANs), dynamic covalent networks,
-supramolecular polymers, associating polymers, sticky polymers, transient networks,
-self-healing polymers, double-network elastomers, sacrificial bonds, hybrid molecular
-dynamics / Monte Carlo (MD/MC), Metropolis bond moves, three-body swap potential, Sciortino
-potential, coarse-grained polymer simulation, Kremer-Grest bead-spring model, LAMMPS fix
