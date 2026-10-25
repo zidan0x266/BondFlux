@@ -912,6 +912,11 @@ void FixBondFlux::contact_check(int mcstep)
   const int nlocal = atom->nlocal;
   const double dtc = ncontact * update->dt;
 
+  // the dynamic partner of each sticker for permanent_neighbor(): porig of the last MC step
+  //   is stale here, since atoms are sorted and migrate between MC steps
+
+  for (int i = 0; i < nlocal; i++) porig[i] = (tagint) store[i][0];
+
   for (int i = 0; i < nlocal; i++) {
     if (!(mask[i] & groupbit)) continue;
     const int now = has_candidate(i);

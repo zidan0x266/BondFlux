@@ -27,8 +27,7 @@ BondFlux is a single LAMMPS fix style, `fix bond/flux`, with two modes:
 
 Associative exchange uses the `mc` shift and swap moves; dissociative networks and stickers
 add formation and breaking, with the association energy `ebond`. In `3body` mode, lambda = 1
-gives barrier-free bond swaps, while lambda > 1 suppresses them, so that bonds change mainly
-by dissociation.
+gives barrier-free bond swaps, and lambda > 1 slows them down.
 
 The Monte Carlo moves satisfy detailed balance with respect to the full force field (bond
 style, pair style and `special_bonds` weights), in serial and in parallel. A reaction barrier
@@ -109,8 +108,10 @@ fix ID group-ID bond/flux 3body sw eps sigma B p q rc lambda keyword value ...
 **mc**: every `Nevery` steps each sticker (atom of the fix group) is offered one move. A
 bonded sticker breaks its bond (probability `break`) or exchanges it with a candidate within
 the reaction window; a free sticker forms a bond (probability `form`). Every bond broken or
-formed must have a length in `[rmin, rc)`, which makes each move reversible. `btype` is the
-dynamic bond type and `T` the Metropolis temperature (use the thermostat set point).
+formed must have a length in `[rmin, rc)`, which makes each move reversible. A bond stretched
+beyond `rc` can therefore neither break nor exchange; under large deformation, choose `rc` to
+cover the bond lengths that should stay reactive. `btype` is the dynamic bond type and `T` the
+Metropolis temperature (use the thermostat set point).
 
 | keyword | value | default |
 |---|---|---|
@@ -140,8 +141,10 @@ contact time.
 
 **3body**: V(r) = 4 eps [(sigma/r)^2n - (sigma/r)^n] between bondable stickers, plus
 lambda eps V3(r_ij) V3(r_ik) for every sticker with two partners (V3 = 1 below the minimum,
--V/eps above). lambda = 1 makes the swap barrier-free; lambda > 1 adds a barrier of
-(lambda - 1) eps. By default V is shifted to zero at `rc` and rescaled to a depth of -eps;
+-V/eps above). lambda = 1 makes the swap barrier-free. For lambda > 1 a sticker with two
+partners at the minimum costs (lambda - 1) eps, and the swap has a barrier of
+eps (1 - 1/lambda), which stays below the bond energy eps. By default V is shifted to zero at
+`rc` and rescaled to a depth of -eps;
 `eshift no` gives the unshifted form of Sciortino. Keywords: `bondable`,
 `rbond` (distance that defines a bond for the output; default: the cutoff of each pair),
 `eshift`, `coeff` and `triplet`.
@@ -237,7 +240,8 @@ python3 tests/test_nve.py                                 # energy with MC moves
   has no systematic drift. Without the correction it rises by 0.16 eps per accepted move in the
   Kremer-Grest network at dt = 0.01 (0.046 at dt = 0.005), and with it by 0.0095 (-0.0003).
 - **Contact diagnostics**: contact time, episodes and missed episodes equal an exact recount
-  from the trajectory on 1, 2 and 4 MPI ranks. In the Kremer-Grest network, MC every 100 steps
+  from the trajectory on 1, 2 and 4 MPI ranks, also with permanent bonds between stickers
+  inside the reaction window. In the Kremer-Grest network, MC every 100 steps
   misses 42 % of the contact episodes resolved every 10 steps; MC every 10 steps misses none.
 - **3body**: forces and virial agree with finite differences to 1e-9, for both bond shapes and
   with per-type-pair and per-triplet parameters. For lambda = 1 the potential energy stays at
