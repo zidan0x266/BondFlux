@@ -4,9 +4,8 @@ Dynamic bonds for LAMMPS: bond exchange, bond swaps, and reversible bond formati
 breaking in polymer networks.
 
 BondFlux is a simulation toolkit for dynamic bonds in polymer networks. It adds bond
-formation, breaking, and exchange to LAMMPS molecular dynamics of coarse-grained
-(bead-spring, Kremer-Grest) polymers. It covers both classes of dynamic covalent bonds as
-well as reversible physical bonds:
+formation, breaking, and exchange to LAMMPS molecular dynamics of coarse-grained polymers.
+It covers both classes of dynamic covalent bonds as well as reversible physical bonds:
 
 - **Associative exchange**: vitrimers and other associative covalent adaptable networks
   (CANs). A bond swaps to a new partner, so the number of crosslinks stays constant, as in
