@@ -1919,9 +1919,9 @@ double FixBondFlux::memory_usage()
   bytes += (double) nmax_work * (sizeof(tagint) + 3 * sizeof(int) + sizeof(double));
   bytes += (double) maxbin * sizeof(int);
   bytes += (double) (maxorder + maxcand + maxshort) * sizeof(int);
-  const double ntp1 = atom->ntypes + 1;
-  bytes += ntp1 * ntp1 * sizeof(int);
-  if (param3) bytes += ntp1 * ntp1 * sizeof(Param3);
-  if (strength3) bytes += ntp1 * ntp1 * ntp1 * sizeof(double);
+  const double ntypes = atom->ntypes;
+  bytes += (ntypes + 1) * (ntypes + 1) * sizeof(int);
+  if (param3) bytes += (ntypes + 1) * (ntypes + 1) * sizeof(Param3);
+  if (strength3) bytes += (ntypes + 1) * (ntypes + 1) * (ntypes + 1) * sizeof(double);
   return bytes;
 }
