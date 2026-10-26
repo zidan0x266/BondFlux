@@ -1918,5 +1918,10 @@ double FixBondFlux::memory_usage()
   double bytes = 4.0 * atom->nmax * sizeof(double);
   bytes += (double) nmax_work * (sizeof(tagint) + 3 * sizeof(int) + sizeof(double));
   bytes += (double) maxbin * sizeof(int);
+  bytes += (double) (maxorder + maxcand + maxshort) * sizeof(int);
+  const double ntp1 = atom->ntypes + 1;
+  bytes += ntp1 * ntp1 * sizeof(int);
+  if (param3) bytes += ntp1 * ntp1 * sizeof(Param3);
+  if (strength3) bytes += ntp1 * ntp1 * ntp1 * sizeof(double);
   return bytes;
 }
