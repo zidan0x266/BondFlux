@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo/bondflux_logo.png" alt="BondFlux" width="560">
+</p>
+
 # BondFlux
 
 Dynamic bonds for LAMMPS: bond exchange, bond swaps, and reversible bond formation and
